@@ -72,6 +72,8 @@ module initcosmicrays
 #ifdef CRESP
    integer(kind=4), allocatable, dimension(:) :: iarr_cre_e !< array of indexes pointing to all CR electron energy components
    integer(kind=4), allocatable, dimension(:) :: iarr_cre_n !< array of indexes pointing to all CR electron number density components
+   integer(kind=4), allocatable, dimension(:,:) :: iarr_crsp_e !< (iterable) array of indexes pointing to all CR spectral species energy density components
+   integer(kind=4), allocatable, dimension(:,:) :: iarr_crsp_n !< (iterable) array of indexes pointing to all CR spectral species number density components
 #endif /* CRESP */
 
    real,    allocatable, dimension(:)  :: K_crs_paral  !< array containing parallel diffusion coefficients of all CR components
@@ -111,7 +113,7 @@ contains
 
       use constants,       only: cbuff_len, I_ONE, I_TWO, half, big
       use cr_data,         only: init_cr_species, cr_species_tables, cr_gpess, cr_spectral, ncrsp_auto
-      use diagnostics,     only: ma1d, my_allocate
+      use diagnostics,     only: ma1d, ma2d, my_allocate
       use dataio_pub,      only: die, warn, nh
       use func,            only: operator(.notequals.)
       use mpisetup,        only: ibuff, rbuff, lbuff, cbuff, master, slave, piernik_MPI_Bcast
@@ -277,6 +279,9 @@ contains
       ma1d = [ncrb]
       call my_allocate(iarr_cre_e, ma1d)
       call my_allocate(iarr_cre_n, ma1d)
+      ma2d = [nspc, ncrb]
+      call my_allocate(iarr_crsp_e, ma2d)
+      call my_allocate(iarr_crsp_n, ma2d)
 #endif /* CRESP */
       ma1d = [ncrtot]
       call my_allocate(iarr_crs, ma1d)
@@ -300,13 +305,13 @@ contains
       implicit none
 
       type(var_numbers), intent(inout) :: flind
-      integer(kind=4)                  :: icr
+      integer(kind=4)                  :: icr, jnb
 
       flind%crn%beg = flind%all + I_ONE
       flind%crs%beg = flind%crn%beg
 
       flind%crn%all = ncrn
-      flind%cre%all = ncr2b
+      flind%cre%all = ncr2b * nspc
 
       flind%crs%all = flind%crn%all + flind%cre%all
       do icr = 1, ncrn
@@ -315,7 +320,7 @@ contains
       enddo
       flind%all = flind%all + flind%crn%all
 
-      do icr = I_ONE, ncr2b
+      do icr = I_ONE, ncr2b * nspc
          iarr_cre(icr)        = flind%all + icr
          iarr_crs(ncrn + icr) = flind%all + icr
       enddo
@@ -333,13 +338,20 @@ contains
 
 #ifdef CRESP
       flind%cre%nbeg = flind%crn%end + I_ONE
-      flind%cre%nend = flind%crn%end + ncrb
+      flind%cre%nend = flind%crn%end + ncrb * nspc
       flind%cre%ebeg = flind%cre%nend + I_ONE
-      flind%cre%eend = flind%cre%nend + ncrb
+      flind%cre%eend = flind%cre%nend + ncrb * nspc
 
-      do icr = 1, ncrb
+      do icr = 1, ncrb * nspc !< Arrange indexes for each spectral species in one array; first indexes for n, then e.
          iarr_cre_n(icr) = flind%cre%nbeg - I_ONE + icr
          iarr_cre_e(icr) = flind%cre%ebeg - I_ONE + icr
+      enddo
+
+      do icr = 1, nspc        !< Arrange iterable indexes for each spectral species separately; first indexes for n, then e.
+         do jnb = 1, ncrb
+            iarr_crsp_n(icr, jnb) = flind%crn%end + I_ONE + (icr - I_ONE) * ncrb + jnb
+            iarr_crsp_e(icr, jnb) = flind%crn%end + I_ONE + nspc * ncrb + (icr - I_ONE) * ncrb + jnb
+         enddo
       enddo
 #endif /* CRESP */
 

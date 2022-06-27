@@ -87,8 +87,8 @@ module cresp_crspectrum
    integer(kind=4), dimension(LO:HI), parameter:: oz = [I_ONE, I_ZERO], pm = [I_ONE, -I_ONE] !> auxiliary vectors /todo to be renamed
 
    abstract interface
-      real function function_pointer_1D(x,y)
-         real, intent(in) :: x, y
+      real function function_pointer_1D(x,y,z)
+         real, intent(in) :: x, y, z
       end function function_pointer_1D
    end interface
 
@@ -242,7 +242,7 @@ contains
 
       do i_sub = 1, n_substep                   !< if one substep, all is done the classic way
 ! Compute momentum changes in after time period [t,t+dt]
-         call cresp_update_bin_index(sptab%ub*dt, sptab%ud*dt, p_cut, p_cut_next, cfl_cresp_violation)
+         call cresp_update_bin_index(sptab%ub*dt, sptab%ud*dt, sptab%uh*dt, p_cut, p_cut_next, cfl_cresp_violation)
 
          if (cfl_cresp_violation) then !< disallow_CRnegatives is not used here, as potential negatives do not appear in transfer of n,e but in p
             approx_p = e_small_approx_p         !< restore approximation after momenta computed
@@ -264,7 +264,7 @@ contains
 
 ! edt(1:ncrb) = e(1:ncrb) *(one-0.5*dt*r(1:ncrb)) - (eflux(1:ncrb) - eflux(0:ncrb-1))/(one+0.5*dt*r(1:ncrb))   !!! oryginalnie u Miniatiego
 ! Compute coefficients R_i needed to find energy in [t,t+dt]
-         call cresp_compute_r(sptab%ub, sptab%ud, p_next, active_bins_next)                 ! new active bins already received some particles, Ri is needed for those bins too
+         call cresp_compute_r(sptab%ub, sptab%ud, sptab%uh, p_next, active_bins_next)                 ! new active bins already received some particles, Ri is needed for those bins too
 
          edt(1:ncrb) = edt(1:ncrb) *(one-dt*r(1:ncrb))
 
@@ -800,7 +800,7 @@ contains
 
 !----------------------------------------------------------------------------------------------------
 
-   subroutine cresp_update_bin_index(ubdt, uddt, p_cut, p_cut_next, dt_too_high) ! evaluates only "next" momenta and is called after finding outer cutoff momenta
+   subroutine cresp_update_bin_index(ubdt, uddt, uhdt, p_cut, p_cut_next, dt_too_high) ! evaluates only "next" momenta and is called after finding outer cutoff momenta
 
       use constants,      only: zero, I_ZERO, I_ONE, one
 #ifdef CRESP_VERBOSED
@@ -811,7 +811,7 @@ contains
 
       implicit none
 
-      real,                   intent(in)  :: ubdt, uddt     !> in-algorithm energy dissipation terms
+      real,                   intent(in)  :: ubdt, uddt, uhdt     !> in-algorithm energy dissipation terms
       real, dimension(LO:HI), intent(in)  :: p_cut
       real, dimension(LO:HI), intent(out) :: p_cut_next
       logical,                intent(out) :: dt_too_high
@@ -819,7 +819,8 @@ contains
 
       dt_too_high = .false.
 ! Compute p_cut at [t+dt] (update p_range)
-      p_cut_next = p_cut * (one + [p_rch(uddt, ubdt*p_cut(LO)), p_rch(uddt, ubdt*p_cut(HI))]) ! changed from - to + for the sake of intuitiveness in p_rch subroutine
+      print *, shape(p_rch)
+      p_cut_next = p_cut * (one + [p_rch(uddt,uhdt,ubdt*p_cut(LO)), p_rch(uddt,uhdt,ubdt*p_cut(HI))]) ! changed from - to + for the sake of intuitiveness in p_rch subroutine
       p_cut_next = abs(p_cut_next)
 ! Compute likely cut-off indices after current timestep
       i_cut_next = get_i_cut(p_cut_next)
@@ -853,7 +854,7 @@ contains
 
 ! Compute upwind momentum p_upw for all fixed edges
       p_upw = zero
-      p_upw(1:ncrb) = [( p_fix(i)*(one - p_rch(uddt,ubdt*p_fix(i))), i=1,ncrb )] !< p_upw is computed with minus sign
+      p_upw(1:ncrb) = [( p_fix(i)*(one - p_rch(uddt,uhdt,ubdt*p_fix(i))), i=1,ncrb )] !< p_upw is computed with minus sign
 
 #ifdef CRESP_VERBOSED
       write (msg, "(A, 2I3)") 'Change of  cut index lo,up:', del_i    ; call printinfo(msg)
@@ -1601,7 +1602,7 @@ contains
 ! compute R (eq. 25)
 !
 !-------------------------------------------------------------------------------------------------
-   subroutine cresp_compute_r(u_b, u_d, p, bins)
+   subroutine cresp_compute_r(u_b, u_d, u_h, p, bins)
 
       use constants,      only: zero, four, five
       use initcosmicrays, only: ncrb
@@ -1610,7 +1611,7 @@ contains
       implicit none
 
       integer(kind=4), dimension(:), intent(in) :: bins
-      real,                          intent(in) :: u_b, u_d
+      real,                          intent(in) :: u_b, u_d, u_h
       real, dimension(0:ncrb),       intent(in) :: p
       real, dimension(size(bins))               :: r_num, r_den
 
@@ -1634,7 +1635,7 @@ contains
       endwhere
 
       where (abs(r_num) > zero .and. abs(r_den) > zero)                  !< BEWARE - regression: comparisons against
-         r(bins) = u_d + u_b * r_num/r_den !all cooling effects will come here   !< eps and epsilon result in bad results;
+         r(bins) = u_d + u_h + u_b * r_num/r_den !all cooling effects will come here   !< eps and epsilon result in bad results;
       endwhere                                                                  !< range of values ofr_num and r_den is very wide
 
    end subroutine cresp_compute_r
@@ -1871,37 +1872,37 @@ contains
 !>
 !! \brief Relative change of momentum due to losses (u_b*p*dt) and compression u_d*dt (Taylor expansion up to 3rd order)
 !<
-   real function p_rch_ord_1(uddt, ubpdt)
+   real function p_rch_ord_1(uddt, uhdt, ubpdt)
 
       implicit none
 
-      real, intent(in) :: uddt, ubpdt
+      real, intent(in) :: uddt, ubpdt, uhdt
 
-      p_rch_ord_1 = -(uddt + ubpdt)
+      p_rch_ord_1 = -(uddt +uhdt + ubpdt)
 
    end function p_rch_ord_1
 !-------------------------------------------------------------------------------------------------
-   real function p_rch_ord_2_1(uddt, ubpdt)     !< adds 2nd term and calls 1st order
+   real function p_rch_ord_2_1(uddt, uhdt, ubpdt)     !< adds 2nd term and calls 1st order
 
       use constants, only: half
 
       implicit none
 
-      real, intent(in) :: uddt, ubpdt
+      real, intent(in) :: uddt, uhdt, ubpdt
 
-      p_rch_ord_2_1 = p_rch_ord_1(uddt, ubpdt) + ( half*uddt**2 + ubpdt**2)
+      p_rch_ord_2_1 = p_rch_ord_1(uddt, uhdt, ubpdt) + ( half*(uddt**2+uddt**2) + ubpdt**2)
 
    end function p_rch_ord_2_1
 !-------------------------------------------------------------------------------------------------
-   real function p_rch_ord_3_2_1(uddt, ubpdt)     !< adds 3rd term and calls 2nd and 1st order
+   real function p_rch_ord_3_2_1(uddt, uhdt, ubpdt)     !< adds 3rd term and calls 2nd and 1st order
 
       use constants, only: onesth
 
       implicit none
 
-      real, intent(in) :: uddt, ubpdt
+      real, intent(in) :: uddt, uhdt, ubpdt
 
-      p_rch_ord_3_2_1 = p_rch_ord_2_1(uddt, ubpdt) - onesth * uddt**3 - ubpdt**3
+      p_rch_ord_3_2_1 = p_rch_ord_2_1(uddt, uhdt, ubpdt) - onesth *(uddt**3+uhdt**3) - ubpdt**3
 
    end function p_rch_ord_3_2_1
 !----------------------------------------------------------------------------------------------------

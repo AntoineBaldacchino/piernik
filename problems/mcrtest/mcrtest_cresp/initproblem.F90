@@ -274,7 +274,7 @@ contains
 #ifdef CRESP
 ! Explosions @CRESP independent of cr nucleons
                   do icr = 1, nspc
-                     e_tot = amp_cr1 * cre_eff(nspc) * decr
+                     e_tot = amp_cr1 * cre_eff(icr) * decr
                      if (e_tot > smallcree .and. use_cresp) then
 !                         cresp%n = 1.e-4 ;  cresp%e = 1.e-2
                         call cresp_get_scaled_init_spectrum(cresp%n, cresp%e, e_tot, icr)

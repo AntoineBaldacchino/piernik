@@ -164,7 +164,7 @@ contains
       use shear,          only: qshear, omega
 #endif /* SHEAR */
 #ifdef COSM_RAYS
-      use initcosmicrays, only: gamma_cr_1, iarr_crn, iarr_crs, nspc
+      use initcosmicrays, only: gamma_cr_1, iarr_crn, nspc
 #ifdef SN_SRC
       use snsources,      only: cr_sn
 #endif /* SN_SRC */
@@ -207,7 +207,7 @@ contains
          cg%u(fl%imy, RNG) = 0.0
          cg%u(fl%imz, RNG) = 0.0
 #ifdef COSM_RAYS
-         cg%u(iarr_crs, RNG)  = 0.0
+         cg%u(iarr_crn, RNG)  = 0.0
 #endif /* COSM_RAYS */
 
          do k = cg%lhn(zdim,LO), cg%lhn(zdim,HI)

@@ -100,8 +100,8 @@
     initial_spectrum = 'plpc' ! 'powl', 'brpl', 'bump', 'symf', 'syme'
     cre_active(:)  = 8*1.0
     NR_iter_limit = 50
-    arr_dim_a = 200
-    arr_dim_n = 200
+    arr_dim_a = 50
+    arr_dim_n = 50
     arr_dim_q = 1000
     adiab_active(:)  = 8*.true.
     !adiab_active(2)  = .false.

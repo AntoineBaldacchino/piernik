@@ -63,6 +63,7 @@ module fluidindex
    integer(kind=4), allocatable, dimension(:) :: iarr_all_mz   !< array of indexes pointing to mom. densities of all fluids
    integer(kind=4), allocatable, dimension(:) :: iarr_all_en   !< array of indexes pointing to ener. densities of all fluids
    integer(kind=4), allocatable, dimension(:) :: iarr_all_crn  !< array of indexes pointing to ener. densities of all nuclear CR-components
+   integer(kind=4), allocatable, dimension(:) :: iarr_all_cre  !< array of indexes pointing to ener. densities of all electron CR-components
    integer(kind=4), allocatable, dimension(:) :: iarr_all_crspc  !< array of indexes pointing to ener. densities of all electron CR-components
    integer(kind=4), allocatable, dimension(:), target :: iarr_all_crs   !< array of indexes pointing to ener. densities of all CR-components
    integer(kind=4), allocatable, dimension(:), target :: iarr_all_trc   !< array of indexes pointing to tracers
@@ -120,7 +121,7 @@ contains
       use initionized,    only: ion_fluid
       use initneutral,    only: neutral_fluid
 #ifdef COSM_RAYS
-      use initcosmicrays, only: iarr_crn, iarr_crspc, iarr_crs, cosmicray_index
+      use initcosmicrays, only: iarr_crn, iarr_crspc, iarr_crs, iarr_cre, cosmicray_index
 #endif /* COSM_RAYS */
 #ifdef TRACER
       use inittracer,     only: tracer_index, iarr_trc
@@ -172,15 +173,18 @@ contains
 
 #ifdef COSM_RAYS
       allocate(iarr_all_crn(flind%crn%all))
+      allocate(iarr_all_cre(flind%cre%all))
       allocate(iarr_all_crs(flind%crs%all))
-#ifdef CRESP
-      allocate(iarr_all_crspc(flind%crspc%all))
-#endif /* CRESP */
 #else /* !COSM_RAYS */
       allocate(iarr_all_crn(0))
-      allocate(iarr_all_crspc(0))
       allocate(iarr_all_crs(0))
 #endif /* !COSM_RAYS */
+
+#ifdef CRESP
+      allocate(iarr_all_crspc(flind%crspc%all))
+#else /* !CRESP */
+      allocate(iarr_all_crspc(0))
+#endif /* !CRESP */
 
 #ifdef TRACER
       allocate(iarr_all_trc(flind%trc%all))
@@ -205,17 +209,22 @@ contains
 
 #ifdef COSM_RAYS
 ! Compute index arrays for the CR components
+      print *, 'flind%crs : ', flind%crs, ' flind%crs%all : ', flind%crs%all, ' flind%crs%beg : ', flind%crs%beg, ' flind%crs%end : ', flind%crs%end
       !print *, 'iarr_all_swp : ', iarr_all_swp
+      !print *, 'iarr_crs : ', iarr_crs
       iarr_all_swp(xdim,flind%crs%beg:flind%crs%end) = iarr_crs
       iarr_all_swp(ydim,flind%crs%beg:flind%crs%end) = iarr_crs
       iarr_all_swp(zdim,flind%crs%beg:flind%crs%end) = iarr_crs
 
       iarr_all_crn(1:flind%crn%all) = iarr_crn
+      iarr_all_cre(1:flind%cre%all) = iarr_cre
       iarr_all_crs(1:flind%crs%all) = iarr_crs
+#endif /* COSM_RAYS */
+
 #ifdef CRESP
+      print *, 'flind%crspc : ', flind%crspc, ' flind%crspc%all : ', flind%crspc%all, ' flind%crspc%beg : ', flind%crspc%beg, ' flind%crspc%end : ', flind%crspc%end
       iarr_all_crspc(1:flind%crspc%all) = iarr_crspc
 #endif /* CRESP */
-#endif /* COSM_RAYS */
 
 #ifdef TRACER
       iarr_all_swp(xdim,flind%trc%beg:flind%trc%end) = iarr_trc
@@ -265,8 +274,9 @@ contains
       call my_deallocate(iarr_all_en)
 
       call my_deallocate(iarr_all_crn)
-      call my_deallocate(iarr_all_crspc)
+      call my_deallocate(iarr_all_cre)
       call my_deallocate(iarr_all_crs)
+      call my_deallocate(iarr_all_crspc)
 
       call my_deallocate(iarr_all_trc)
 

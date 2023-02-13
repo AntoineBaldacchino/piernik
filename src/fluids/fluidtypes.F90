@@ -137,6 +137,7 @@ module fluidtypes
       !> \todo those vars should be converted to pointers
       type(component) :: trc         !< numbers of tracer fluids
       type(component) :: crs         !< numbers of variables in all cosmic ray components
+      type(component) :: cre         !< numbers of variables in all cosmic ray electron components
       type(component) :: crn         !< numbers of variables in cosmic ray nuclear components
 #ifdef CRESP
       type(component_spectral) :: crspc                            !< variables in cosmic ray spectral components

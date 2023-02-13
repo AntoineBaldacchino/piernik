@@ -68,6 +68,7 @@ module initcosmicrays
    integer(kind=4), allocatable, dimension(:) :: gpcr_ess_noncresp !< indexes of essentials for grad_pcr calculation for non-CRESP components
    ! public component data
    integer(kind=4), allocatable, dimension(:) :: iarr_crn !< array of indexes pointing to all CR nuclear components
+   integer(kind=4), allocatable, dimension(:) :: iarr_cre !< array of indexes pointing to all CR electron components
    integer(kind=4), allocatable, dimension(:) :: iarr_crspc !< array of indexes pointing to all CR electron components
    integer(kind=4), allocatable, dimension(:) :: iarr_crs !< array of indexes pointing to all CR components
 #ifdef CRESP
@@ -278,6 +279,7 @@ contains
       else
          ma1d = [ncr2b * nspc]
       endif
+      call my_allocate(iarr_cre, ma1d)   ! < iarr_crspc will point: (1:ncrb) - cre number per bin, (ncrb+1:2*ncrb) - cre energy per bin
       call my_allocate(iarr_crspc, ma1d) ! < iarr_crspc will point: (1:ncrb) - cre number per bin, (ncrb+1:2*ncrb) - cre energy per bin
 
 #ifdef CRESP
@@ -315,14 +317,12 @@ contains
       flind%crn%beg = flind%all + I_ONE
       flind%crs%beg = flind%crn%beg
 
-      flind%crn%all   = ncrn
-      flind%crs%all = flind%crn%all
+      flind%crn%all = ncrn
+      flind%cre%all = size(iarr_cre)
 
-#ifdef CRESP
-      flind%crspc%all = ncr2b * nspc
+      flind%crs%all = flind%crn%all + flind%cre%all
 
-      flind%crs%all = flind%crs%all + flind%crspc%all
-#endif /* CRESP */
+
 
       do icr = 1, ncrn
          iarr_crn(icr) = flind%all + icr
@@ -330,26 +330,51 @@ contains
       enddo
       flind%all = flind%all + flind%crn%all
 
-      do icr = I_ONE, ncr2b * nspc
-         iarr_crspc(icr)      = flind%all + icr
-         iarr_crs(ncrn + icr) = flind%all + icr
-      enddo
-#ifdef CRESP
-      flind%all = flind%all + flind%crspc%all
-#endif /* CRESP */
-      flind%crn%end   = flind%crn%beg + flind%crn%all - I_ONE
-#ifdef CRESP
-      flind%crspc%beg = flind%crn%end + I_ONE
-      flind%crspc%end = flind%all
-      flind%crs%end = flind%crspc%end
-      if (flind%crspc%all  /= 0) flind%components = flind%components + I_ONE
-      flind%crspc%pos = flind%components
-#endif /* CRESP */
+      !do icr = I_ONE, ncr2b * nspc
+      !   iarr_cre(icr) = flind%all + icr
+      !   iarr_crspc(icr)      = flind%all + icr
+      !   iarr_crs(ncrn + icr) = flind%all + icr
+      !enddo
+
+      print *, 'ncrn (non spectral components) : ', ncrn
+      print *, 'nspc (spectral components) : ', nspc
+      print *, 'ncrsp : ', ncrsp
+      print *, 'ncr2b : ', ncr2b
+      print *, 'iarr_cre : ', iarr_cre
+
+      flind%all = flind%all + flind%cre%all
+      flind%crn%end = flind%crn%beg + flind%crn%all - I_ONE
+      flind%cre%beg = flind%crn%end + I_ONE
+      flind%cre%end = flind%cre%beg + flind%cre%all - I_ONE
+      flind%crs%end = flind%cre%end
       if (flind%crn%all  /= 0) flind%components = flind%components + I_ONE
       flind%crn%pos = flind%components
+      if (flind%cre%all  /= 0) flind%components = flind%components + I_ONE
+      flind%cre%pos = flind%components
+
+      print *, 'flind%crn%all : ', flind%crn%all, 'flind%crn%beg : ', flind%crn%beg, 'flind%crn%end : ',flind%crn%end
+      print *, 'flind%cre%all : ', flind%cre%all, 'flind%cre%beg : ', flind%cre%beg, 'flind%cre%end : ',flind%cre%end
+      print *, 'flind%crs%all : ', flind%crs%all, 'flind%crs%beg : ', flind%crs%beg, 'flind%crs%end : ',flind%crs%end
+      print *, 'flind%all : ', flind%all
 
 
 #ifdef CRESP
+
+      flind%crspc%beg = flind%all + I_ONE
+      flind%crspc%all = ncr2b * nspc
+
+      flind%crs%all = flind%crs%all + flind%crspc%all
+
+      do icr = I_ONE, ncr2b * nspc
+         iarr_crspc(icr)      = flind%all + icr
+      enddo
+
+      flind%all = flind%all + flind%crspc%all
+      flind%crspc%beg = flind%crn%end + I_ONE
+      flind%crspc%end = flind%all
+      if (flind%crspc%all  /= 0) flind%components = flind%components + I_ONE
+      flind%crspc%pos = flind%components
+
       if (.not. allocated(flind%crspcs)) allocate(flind%crspcs(nspc))
 !     flind%crspc%nbeg, flind%crspc%nend, flind%crspc%ebeg, flind%crspc%eend are not used in this approach
 
@@ -370,6 +395,7 @@ contains
 
       flind%crspcs(:)%all = ncr2b
       flind%crspc%all = ncr2b * nspc
+
 #endif /* CRESP */
 
    end subroutine cosmicray_index
@@ -382,6 +408,7 @@ contains
 
       call my_deallocate(iarr_crn)
       call my_deallocate(iarr_crspc)
+      call my_deallocate(iarr_cre)
       call my_deallocate(iarr_crs)
       call my_deallocate(K_crs_paral)
       call my_deallocate(K_crs_perp)

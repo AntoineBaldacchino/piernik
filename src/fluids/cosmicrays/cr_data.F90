@@ -134,20 +134,20 @@ module cr_data
    real, parameter :: sigma_C12_Li7  = 10.   !< mbarn
    real, parameter :: sigma_C12_Be9  = 6.   !< mbarn
    real, parameter :: sigma_C12_Be10 = 3.5   !< mbarn
-   real, parameter :: sigma_C12_B11  = 31.5 !3.5 !< mbarn
-   real, parameter :: sigma_C12_B10  = 17.3 !3.5 !< mbarn
+   !real, parameter :: sigma_C12_B11  = 31.5 !3.5 !< mbarn
+   !real, parameter :: sigma_C12_B10  = 17.3 !3.5 !< mbarn
 
    real, parameter :: sigma_N14_Li7  = 9.5 !< mbarn
-   real, parameter :: sigma_N14_Be9  = 4.5!< mbarn
-   real, parameter :: sigma_N14_Be10  = 2.0 !< mbarn
-   real, parameter :: sigma_N14_B10  = 16.0 !< mbarn
-   real, parameter :: sigma_N14_B11  = 15.0 !< mbarn
+   !real, parameter :: sigma_N14_Be9  = 4.5!< mbarn
+   !real, parameter :: sigma_N14_Be10  = 2.0 !< mbarn
+   !real, parameter :: sigma_N14_B10  = 16.0 !< mbarn
+   !real, parameter :: sigma_N14_B11  = 15.0 !< mbarn
 
    real, parameter :: sigma_O16_Li7  = 9.5 !< mbarn
    real, parameter :: sigma_O16_Be9  = 4.5 !< mbarn
    real, parameter :: sigma_O16_Be10 = 2.   !< mbarn
-   real, parameter :: sigma_O16_B10  = 8.3  !< mbarn
-   real, parameter :: sigma_O16_B11  = 13.9  !< mbarn
+   !real, parameter :: sigma_O16_B10  = 8.3  !< mbarn
+   !real, parameter :: sigma_O16_B11  = 13.9  !< mbarn
 
 !<====Cross sections for spallation from Génolini et al., 2018 ====>
 
@@ -442,25 +442,25 @@ contains
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_C12), cr_table(icr_Li7 )) = sigma_C12_Li7
          if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_C12), cr_table(icr_Be9 )) = sigma_C12_Be9
          if (eCRSP(icr_Be10)) cr_sigma(cr_table(icr_C12), cr_table(icr_Be10)) = sigma_C12_Be10
-         if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B10 )) = sigma_C12_B10
-         if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B11 )) = sigma_C12_B11
+         !if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B10 )) = sigma_C12_B10
+         !if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B11 )) = sigma_C12_B11
 
       endif
       if (eCRSP(icr_N14)) then
          cr_primary(cr_table(icr_N14)) = primary_N14
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Li7 )) = sigma_N14_Li7
-         if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be9 )) = sigma_N14_Be9
-         if (eCRSP(icr_Be10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be10)) = sigma_N14_Be10
-         if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B10 )) = sigma_N14_B10
-         if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B11 )) = sigma_N14_B11
+         !if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be9 )) = sigma_N14_Be9
+         !if (eCRSP(icr_Be10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be10)) = sigma_N14_Be10
+         !if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B10 )) = sigma_N14_B10
+         !if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B11 )) = sigma_N14_B11
       endif
       if (eCRSP(icr_O16)) then
          cr_primary(cr_table(icr_O16)) = primary_O16
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_O16), cr_table(icr_Li7 )) = sigma_O16_Li7
          if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_O16), cr_table(icr_Be9 )) = sigma_O16_Be9
          if (eCRSP(icr_Be10)) cr_sigma(cr_table(icr_O16), cr_table(icr_Be10)) = sigma_O16_Be10
-         if (eCRSP(icr_B10)) cr_sigma(cr_table(icr_O16), cr_table(icr_B10)) = sigma_O16_B10
-         if (eCRSP(icr_B11)) cr_sigma(cr_table(icr_O16), cr_table(icr_B11)) = sigma_O16_B11
+         !if (eCRSP(icr_B10)) cr_sigma(cr_table(icr_O16), cr_table(icr_B10)) = sigma_O16_B10
+         !if (eCRSP(icr_B11)) cr_sigma(cr_table(icr_O16), cr_table(icr_B11)) = sigma_O16_B11
       endif
       cr_sigma = cr_sigma * mbarn
       if (eCRSP(icr_Be10)) cr_tau(cr_table(icr_Be10)) = tau_Be10 * myr

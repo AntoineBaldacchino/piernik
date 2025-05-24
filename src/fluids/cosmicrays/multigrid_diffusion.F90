@@ -104,6 +104,7 @@ contains
 !<
    subroutine multigrid_diff_par
 
+      use bcast,            only: piernik_MPI_Bcast
       use cg_list_global,   only: all_cg
       use constants,        only: BND_ZERO, BND_XTRAP, BND_REF, BND_NEGREF, xdim, ydim, zdim, GEO_XYZ, half, zero, one, VAR_CENTER, VAR_XFACE, VAR_YFACE, VAR_ZFACE, I_ONE
       use dataio_pub,       only: die, warn, msg, nh
@@ -111,7 +112,7 @@ contains
       use fluidindex,       only: flind
       use func,             only: operator(.notequals.)
       use global,           only: cc_mag
-      use mpisetup,         only: master, slave, nproc, ibuff, rbuff, lbuff, cbuff, piernik_MPI_Bcast
+      use mpisetup,         only: master, slave, nproc, ibuff, rbuff, lbuff, cbuff
       use multigridvars,    only: single_base
       use named_array_list, only: qna
 
@@ -240,7 +241,7 @@ contains
       endif
 
       if (single_base .and. nproc > 1) then
-         call warn("[multigrid_diffusion:multigrid_diff_par] single_base disabled just in case")
+         if (master) call warn("[multigrid_diffusion:multigrid_diff_par] single_base disabled just in case")
          single_base = (nproc == 1)
       endif
 
@@ -281,7 +282,7 @@ contains
       use global,         only: dt
       use initcosmicrays, only: use_CRdiff
       use mpisetup,       only: master
-      use multigridvars,  only: stdout
+      use multigridvars,  only: v_mg
 
       implicit none
 
@@ -300,7 +301,7 @@ contains
       else
          if (dt < 0.99999 * diff_dt_crs_orig * diff_tstep_fac .and. .not. halfstep .and. master) then
             write(msg,'(a,f8.3,a)')"[multigrid_diffusion:inworth_mg_diff] Timestep limited somewhere else: dt = ", dt / diff_dt_crs_orig, " of explicit dt_crs."
-            call printinfo(msg, stdout)
+            call printinfo(msg, v_mg)
          endif
          call multigrid_solve_diff
          call all_fluid_boundaries
@@ -320,9 +321,11 @@ contains
       use dataio_pub,        only: msg, printinfo, warn
       use fluidindex,        only: flind
       use func,              only: operator(.notequals.)
+      use initcosmicrays,    only: iarr_crs
       use mpisetup,          only: master
       use multigrid_helpers, only: all_dirty
       use multigridvars,     only: ts, tot_ts
+      use named_array_list,  only: wna
       use timer,             only: set_timer
 
       implicit none
@@ -339,7 +342,7 @@ contains
          call init_source(cr_id)
          if (vstat%norm_rhs .notequals. zero) then
             if (norm_was_zero(cr_id) .and. master) then
-               write(msg,'(a,i2.2,a)')"[multigrid_diffusion:multigrid_solve_diff] CR-fluid #", cr_id, " is now available in measurable quantities."
+               write(msg,'(a)')"[multigrid_diffusion:multigrid_solve_diff] CR-fluid '" // trim(wna%get_component_name(wna%fi, iarr_crs(cr_id))) // "' is now available in measurable quantities."
                call printinfo(msg)
             endif
             norm_was_zero(cr_id) = .false.
@@ -350,7 +353,7 @@ contains
             ! enddo
          else
             if (.not. norm_was_zero(cr_id) .and. master) then
-               write(msg,'(a,i2.2,a)')"[multigrid_diffusion:multigrid_solve_diff] Source norm of CR-fluid #", cr_id, " == 0., skipping."
+               write(msg,'(a)')"[multigrid_diffusion:multigrid_solve_diff] Source norm of CR-fluid '" // trim(wna%get_component_name(wna%fi, iarr_crs(cr_id))) // "' == 0., skipping."
                call warn(msg)
             endif
             norm_was_zero(cr_id) = .true.
@@ -544,7 +547,7 @@ contains
          endif
       endif
 
-      write(vstat%cprefix,'("C",i2.2)') cr_id
+      vstat%cprefix = trim(wna%get_component_name(wna%fi, iarr_crs(cr_id))) // "-"
       write(dirty_label, '("md_",i2.2,"_dump")')  cr_id
 
 #ifdef DEBUG

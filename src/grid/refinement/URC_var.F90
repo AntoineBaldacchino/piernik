@@ -110,7 +110,7 @@ contains
       call identify_field(rf%rvar, iv, ic)
 
       if (iv == INVALID) then
-         if (master) call warn("[unified_ref_crit_var:decode_urcv] ignoring '" // trim(rf%rvar) // "'")
+         if (master) call warn("[URC_var:decode_urcv] ignoring '" // trim(rf%rvar) // "'")
          return
       endif
 
@@ -124,7 +124,7 @@ contains
          enddo
       else
          allocate(this)
-         this = init(rf, iv)
+         this = init(rf, iv, INVALID)
       endif
 
    end function decode_urcv
@@ -174,7 +174,7 @@ contains
       !> \todo identify here all {den,vl[xyz],ene}{d,n,i}
       !> \todo introduce possibility to operate on pressure or other indirect fields
 
-      write(msg,'(3a)')"[unified_ref_crit_var:identify_field] Unidentified refinement variable: '",trim(vname),"'"
+      write(msg,'(3a)')"[URC_var:identify_field] Unidentified refinement variable: '",trim(vname),"'"
       if (master) call warn(msg)
 
    contains
@@ -198,6 +198,7 @@ contains
 
    function init(rf, iv, ic) result(this)
 
+      use constants,        only: V_VERBOSE, INVALID
       use dataio_pub,       only: printinfo, msg, die, warn
       use func,             only: operator(.notequals.)
       use mpisetup,         only: master
@@ -206,9 +207,9 @@ contains
 
       implicit none
 
-      type(ref_auto_param),      intent(in) :: rf  !< the data read from problem.par
-      integer(kind=4),           intent(in) :: iv  !< index in qna or wna
-      integer(kind=4), optional, intent(in) :: ic  !< sub index in wna
+      type(ref_auto_param), intent(in) :: rf  !< the data read from problem.par
+      integer(kind=4),      intent(in) :: iv  !< index in qna or wna
+      integer(kind=4),      intent(in) :: ic  !< sub index in wna or INVALID if qna
 
       type(urc_var) :: this  !< an object to be constructed
 
@@ -216,16 +217,16 @@ contains
          write(msg, '(5a,g13.5)')"[URC var]   Initializing refinement on variable '", trim(rf%rvar), "', method: '", trim(rf%rname), "', threshold = ", rf%ref_thr
          if (rf%aux .notequals. 0.) write(msg(len_trim(msg)+1:), '(a,g13.5)') ", with parameter = ", rf%aux
          if (rf%plotfield)  write(msg(len_trim(msg)+1:), '(a)') ", with plotfield"
-         if (present(ic)) then
+         if (ic /= INVALID) then
             write(msg(len_trim(msg)+1:), '(a, i3,a,i3,a)') ", wna index: ", iv,"(", ic, ")"
          else
             write(msg(len_trim(msg)+1:), '(a, i3)') ", qna index: ", iv
          endif
-         call printinfo(msg)
-         if (present(ic)) then
-            if (.not. wna%lst(iv)%vital) call warn("[unified_ref_crit_var:init] 4D field '" // trim(wna%lst(iv)%name) // "' is not vital. Please make sure that the guardcells are properly updater for refinement update.")
+         call printinfo(msg, V_VERBOSE)
+         if (ic /= INVALID) then
+            if (.not. wna%lst(iv)%vital) call warn("[URC_var:init] 4D field '" // trim(wna%lst(iv)%name) // "' is not vital. Please make sure that the guardcells are properly updater for refinement update.")
          else
-            if (.not. qna%lst(iv)%vital) call warn("[unified_ref_crit_var:init] 3D field '" // trim(qna%lst(iv)%name) // "' is not vital. Please make sure that the guardcells are properly updater for refinement update.")
+            if (.not. qna%lst(iv)%vital) call warn("[URC_var:init] 3D field '" // trim(qna%lst(iv)%name) // "' is not vital. Please make sure that the guardcells are properly updater for refinement update.")
          endif
       endif
 
@@ -235,7 +236,7 @@ contains
 
       ! own components
       this%iv = iv
-      if (present(ic)) this%ic = ic
+      if (ic /= INVALID) this%ic = ic
       this%rvar  = rf%rvar
       this%rname = rf%rname
       this%aux   = rf%aux
@@ -243,6 +244,8 @@ contains
 !> \todo Implement Richardson extrapolation method, as described in M. Berger papers
 
       select case (trim(this%rname))
+         case ("threshold")
+            this%refine => refine_on_threshold
          case ("grad")
             this%refine => refine_on_gradient
          case ("relgrad")
@@ -251,7 +254,7 @@ contains
             this%refine => refine_on_second_derivative
          case (trim(inactive_name)) ! do nothing
          case default
-            call die("[unified_ref_crit_var:init] unknown refinement detection routine")
+            call die("[URC_var:init] unknown refinement detection routine")
       end select
 
    end function init
@@ -280,6 +283,51 @@ contains
       call this%refine(cg, p3d)
 
    end subroutine mark_var
+
+!>
+!! \brief Refinement based on threshold.
+!! If the value of the field is above the threshold, and the level is below aux value then the cell is marked for refinement.
+!! If aux is not set, then the threshold is used for all levels.
+!<
+
+   subroutine refine_on_threshold(this, cg, p3d)
+
+      use constants, only: INVALID, PPP_AMR, PPP_CG
+      use grid_cont, only: grid_container
+      use ppp,       only: ppp_main
+
+      implicit none
+
+      class(urc_var),                  intent(in)    :: this !< this contains refinement parameters
+      type(grid_container), pointer,   intent(inout) :: cg   !< current grid piece
+      real, dimension(:,:,:), pointer, intent(in)    :: p3d  !< pointer to array to be examined for (de)refinement needs
+
+      integer(kind=4) :: i, j, k
+      real :: r
+      character(len=*), parameter :: L_label = "threshold_mark"
+
+      if (this%aux > 0.) then
+         if (cg%l%id >= this%aux) then
+            if (this%iplot /= INVALID) cg%q(this%iplot)%arr(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = 0.
+            return
+         endif
+      endif
+
+      call ppp_main%start(L_label, PPP_AMR + PPP_CG)
+
+      do k = cg%ks, cg%ke
+         do j = cg%js, cg%je
+            do i = cg%is, cg%ie
+               r = p3d(i, j, k)
+               if (this%iplot /= INVALID) cg%q(this%iplot)%arr(i, j, k) = r
+               if (r >= this%ref_thr) call cg%flag%set(i, j, k)
+            enddo
+         enddo
+      enddo
+
+      call ppp_main%stop(L_label, PPP_AMR + PPP_CG)
+
+   end subroutine refine_on_threshold
 
 !>
 !! \brief R. Loechner criterion
@@ -317,9 +365,9 @@ contains
       character(len=*), parameter :: L_label = "Loechner_mark"
 
       call ppp_main%start(L_label, PPP_AMR + PPP_CG)
-      if (dom%geometry_type /= GEO_XYZ) call die("[unified_ref_crit_var:refine_on_second_derivative] noncartesian geometry not supported yet")
+      if (dom%geometry_type /= GEO_XYZ) call die("[URC_var:refine_on_second_derivative] noncartesian geometry not supported yet")
       if (dom%nb <= how_far+I_ONE) then
-         write(msg, '(a,i1,a)')"[unified_ref_crit_var:refine_on_second_derivative] at least ", how_far+I_ONE+I_ONE, " guardcells are required"
+         write(msg, '(a,i1,a)')"[URC_var:refine_on_second_derivative] at least ", how_far+I_ONE+I_ONE, " guardcells are required"
          ! dux(i+I_ONE, j, k) is accessing p3d(i+I_ONE+I_ONE, j, k), so for i = cg%ie + how_far*dom%D_x means that dom%nb has to be at least 4
          ! ToDo: check if it is safe to reduce how_far and avoid refinement flickering
          call die(msg)
@@ -608,7 +656,7 @@ contains
       end function rel_grad2
 
       !>
-      !! \brief Return 'relative gradient' defined as |a-b|/(|a| + |b|)
+      !! \brief Return 'relative gradient' defined as |a - b| / (|a| + |b|)
       !!
       !! \details This routine should return value between 0 and 1.
       !! rel_grad_1pair == 0 when a == b, also when a == b == 0
@@ -635,11 +683,11 @@ contains
       !>
       !! \brief square of an 'addition' of two numbers from [0, 1] range.
       !!
-      !! \details Let us define a+b so it obeys the following rules:
+      !! \details Let us define a (+) b so it obeys the following rules:
       !! a (+) b = b (+) a
       !! a (+) 0 = a
       !! a (+) 1 = 1
-      !! if a << 1 and b << 1, a (+) b \simeq sqrt(a**2+ b**2)
+      !! if a << 1 and b << 1, a (+) b \simeq sqrt(a**2 + b**2)
       !!
       !! One of possible formulas is:
       !! a (+) b = sqrt(a**2 - a**2 * b**2 + b**2)

@@ -79,10 +79,13 @@ contains
 !! \warning There might be other evolving variables (such as mass_defect::magic_mass) that should be added here
 !!
 !! \todo Move this routine somewhere else, because it should be available for all hydro schemes
+!!
+!! \todo Also take care of particles.
 !>
 
    subroutine repeat_fluidstep
 
+      use allreduce,        only: piernik_MPI_Allreduce
       use cg_cost_data,     only: I_OTHER
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
@@ -90,11 +93,17 @@ contains
       use dataio_pub,       only: warn, msg, die
       use global,           only: dt, dt_full, t, t_saved, max_redostep_attempts, nstep, nstep_saved, dt_cur_shrink, repetitive_steps, tstep_attempt
       use mass_defect,      only: downgrade_magic_mass
-      use mpisetup,         only: master, piernik_MPI_Allreduce
+      use mpisetup,         only: master
       use named_array_list, only: qna, wna, na_var_list_q, na_var_list_w
       use ppp,              only: ppp_main
       use repeatstep,       only: repeat_step
       use user_hooks,       only: user_reaction_to_redo_step
+#if defined(GRAV) && defined(NBODY)
+      use domain,           only: dom
+      use particle_func,    only: particle_in_area
+      use particle_types,   only: particle, P_ID, P_MASS, P_POS_X, P_POS_Z, P_VEL_X, P_VEL_Z, P_ACC_X, P_ACC_Z, P_ENER, P_TFORM, P_TDYN, npf
+      use particle_utils,   only: is_part_in_cg
+#endif /* GRAV && NBODY */
 #ifdef RANDOMIZE
       use randomization,    only: randoms_redostep
 #endif /* RANDOMIZE */
@@ -106,6 +115,11 @@ contains
       integer                        :: i, j
       character(len=dsetnamelen)     :: rname
       character(len=*), parameter :: rs_label = "repeat_step_"
+#if defined(GRAV) && defined(NBODY)
+      logical :: in, phy, out, fin, indomain
+      integer :: p
+      type(particle), pointer :: part
+#endif /* GRAV && NBODY */
 
       if (.not. repetitive_steps) return
 
@@ -201,6 +215,39 @@ contains
                enddo
             end associate
          enddo
+#if defined(GRAV) && defined(NBODY)
+         if (repeat_step()) then
+            if (.not. allocated(cgl%cg%psave)) call die("timestep_retry:repeat_fluidstep] .not. allocated(cgl%cg%psave)")
+            call cgl%cg%pset%cleanup
+            do p = lbound(cgl%cg%psave, 2, kind=4), ubound(cgl%cg%psave, 2, kind=4)
+               indomain = particle_in_area(cgl%cg%psave(P_POS_X:P_POS_Z, p), dom%edge)
+               call is_part_in_cg(cgl%cg, cgl%cg%psave(P_POS_X:P_POS_Z, p), indomain, in, phy, out, fin)
+               call cgl%cg%pset%add(nint(cgl%cg%psave(P_ID, p), kind=4), cgl%cg%psave(P_MASS, p), &
+                    cgl%cg%psave(P_POS_X:P_POS_Z, p), cgl%cg%psave(P_VEL_X:P_VEL_Z, p), &
+                    cgl%cg%psave(P_ACC_X:P_ACC_Z, p), cgl%cg%psave(P_ENER, p), &
+                    in, phy, out, fin, &
+                    cgl%cg%psave(P_TFORM, p), cgl%cg%psave(P_TDYN, p))
+            enddo
+         else
+            if (allocated(cgl%cg%psave)) deallocate(cgl%cg%psave)
+            allocate(cgl%cg%psave(npf, cgl%cg%count_all_particles()))
+            part => cgl%cg%pset%first
+            p = 1
+            do while (associated(part))
+               cgl%cg%psave(P_ID, p)            = part%pdata%pid
+               cgl%cg%psave(P_MASS, p)          = part%pdata%mass
+               cgl%cg%psave(P_POS_X:P_POS_Z, p) = part%pdata%pos
+               cgl%cg%psave(P_VEL_X:P_VEL_Z, p) = part%pdata%vel
+               cgl%cg%psave(P_ACC_X:P_ACC_Z, p) = part%pdata%acc
+               cgl%cg%psave(P_ENER, p)          = part%pdata%energy
+               cgl%cg%psave(P_TFORM, p)         = part%pdata%tform
+               cgl%cg%psave(P_TDYN, p)          = part%pdata%tdyn
+
+               p = p + I_ONE
+               part => part%nxt
+            enddo
+         endif
+#endif /* GRAV && NBODY */
 
          call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
@@ -232,39 +279,38 @@ contains
    subroutine restart_arrays
 
       use cg_list_global,   only: all_cg
-      use constants,        only: AT_BACKUP, AT_IGNORE, dsetnamelen, INVALID
-      use dataio_pub,       only: printinfo, msg
+      use constants,        only: AT_BACKUP, AT_IGNORE, dsetnamelen, V_VERBOSE
+      use dataio_pub,       only: printinfo, msg, die
       use mpisetup,         only: master
-      use named_array_list, only: qna, wna
+      use named_array_list, only: qna, wna, na_var_list_q, na_var_list_w
 
       implicit none
 
-      integer :: i, j
+      integer(kind=4) :: i, j
       character(len=dsetnamelen) :: rname
-      integer(kind=4), dimension(:), allocatable, target :: pos_copy
 
       if (.not. associated(na_lists(1)%p)) na_lists(1)%p => qna
       if (.not. associated(na_lists(2)%p)) na_lists(2)%p => wna
 
-      do j = lbound(na_lists, dim=1), ubound(na_lists, dim=1)
+      do j = lbound(na_lists, dim=1, kind=4), ubound(na_lists, dim=1, kind=4)
          associate (na => na_lists(j)%p)
 
-            do i = lbound(na%lst(:), dim=1), ubound(na%lst(:), dim=1)
+            do i = lbound(na%lst(:), dim=1, kind=4), ubound(na%lst(:), dim=1, kind=4)
                if (na%lst(i)%restart_mode > AT_IGNORE) then
                   rname = get_rname(na%lst(i)%name)
                   if (.not. na%exists(rname)) then
                      if (master) then
                         write(msg,'(3a)')"[timestep_retry:restart_arrays] creating backup field '", rname, "'"
-                        call printinfo(msg)
+                        call printinfo(msg, V_VERBOSE)
                      endif
-                     allocate(pos_copy(size(na%lst(i)%position)))
-                     pos_copy = na%lst(i)%position
-                     if (na%lst(i)%dim4 /= INVALID) then
-                        call all_cg%reg_var(rname, dim4=na%lst(i)%dim4, position=pos_copy, multigrid=na%lst(i)%multigrid, restart_mode = AT_BACKUP)
-                     else
-                        call all_cg%reg_var(rname,                      position=pos_copy, multigrid=na%lst(i)%multigrid, restart_mode = AT_BACKUP)
-                     endif
-                     deallocate(pos_copy)
+                     select type(na)
+                        type is (na_var_list_w)
+                           call all_cg%reg_var(rname, dim4=na%get_dim4(i), multigrid=na%lst(i)%multigrid, restart_mode = AT_BACKUP)
+                        type is (na_var_list_q)
+                           call all_cg%reg_var(rname,                      multigrid=na%lst(i)%multigrid, restart_mode = AT_BACKUP)
+                        class default
+                           call die("[timestep_retry:restart_arrays] unknown named array list type")
+                     end select
                   endif
                endif
             enddo

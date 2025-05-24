@@ -19,7 +19,8 @@ for i in GOLD_COMMIT PROBLEM_NAME SETUP_PARAMS GOLD_PARAMS OUTPUT NTHR; do
 done
 FLAT_PROBLEM_NAME=${PROBLEM_NAME//\//___}  # handle subproblems safely
 
-RUN_COMMAND="mpirun -np $NTHR --oversubscribe"
+OVERSUB=$( mpirun --oversubscribe test true 2> /dev/null && echo "--oversubscribe" || echo "" )
+RUN_COMMAND="mpirun -np $NTHR $OVERSUB"
 SETUP_PARAMS=$SETUP_PARAMS" -n --copy --linkexe"
 PIERNIK_REPO="http://github.com/piernik-dev/piernik"
 PIERNIK=piernik
@@ -37,6 +38,8 @@ GOLD_CSV=${OUT_DIR}gold.csv
 RIEM_LOG=${OUT_DIR}riem_log
 RIEM_CSV=${OUT_DIR}riem.csv
 GOLD_SHA_FILE=${OUT_DIR}__sha__
+
+echo -e "\033[34;1mRunning gold test for $PROBLEM_NAME in $OUT_DIR, defined in $1\033[0m"
 
 # Determine whether gold version has to be recreated
 # Check the content of the $GOLD_SHA_FILE and existence of the output file to be compared to
@@ -171,4 +174,3 @@ fi
 
 # Fail if gold distance is not 0.
 [ $( ( grep "^Total difference between" $GOLD_LOG || echo 1 ) | awk '{print $NF}' ) == 0 ] || exit 1
-

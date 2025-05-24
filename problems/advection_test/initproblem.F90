@@ -89,13 +89,14 @@ contains
 
    subroutine read_problem_par
 
+      use bcast,            only: piernik_MPI_Bcast
       use constants,        only: I_ONE, xdim, zdim
       use dataio_pub,       only: warn, die, nh
       use domain,           only: dom
       use fluidindex,       only: flind, iarr_all_dn
       use func,             only: operator(.notequals.)
       use global,           only: smalld, smallei
-      use mpisetup,         only: rbuff, ibuff, lbuff, master, slave, proc, have_mpi, LAST, piernik_MPI_Bcast
+      use mpisetup,         only: rbuff, ibuff, lbuff, master, slave, proc, have_mpi, LAST
       use named_array_list, only: wna
       use refinement,       only: set_n_updAMR, n_updAMR
       use unified_ref_crit_list, only: urc_list
@@ -546,6 +547,7 @@ contains
 
    subroutine calculate_error_norm
 
+      use allreduce,        only: piernik_MPI_Allreduce
       use cg_list,          only: cg_list_element
       use cg_leaves,        only: leaves
       use constants,        only: pSUM, pMIN, pMAX, idlen
@@ -554,7 +556,7 @@ contains
       use func,             only: operator(.notequals.)
       use global,           only: t
       use grid_cont,        only: grid_container
-      use mpisetup,         only: master, piernik_MPI_Allreduce
+      use mpisetup,         only: master
       use named_array_list, only: qna
 #ifdef MAGNETIC
       use div_B,            only: print_divB_norm
@@ -566,10 +568,10 @@ contains
          enumerator :: N_D, N_2
       end enum
       enum, bind(C)
-         enumerator :: GAS, DST
+         enumerator :: GAS, DST_
       end enum
-      real, dimension(N_D:N_2, GAS:DST) :: norm
-      real, dimension(GAS:DST)          :: neg_err, pos_err
+      real, dimension(N_D:N_2, GAS:DST_) :: norm
+      real, dimension(GAS:DST_)          :: neg_err, pos_err
       type(cg_list_element),  pointer   :: cgl
       type(grid_container),   pointer   :: cg
       real, dimension(:,:,:), pointer   :: inid
@@ -600,16 +602,16 @@ contains
 
          if (associated(flind%dst)) then
             cg%wa(RNG) = inid(RNG) - cg%u(flind%dst%idn, RNG)
-            norm(N_D, DST) = norm(N_D, DST) + sum(cg%wa(RNG)**2, mask=cg%leafmap)
-            norm(N_2, DST) = norm(N_2, DST) + sum(inid( RNG)**2, mask=cg%leafmap)
-            neg_err(DST) = min(neg_err(DST), minval(cg%wa(RNG), mask=cg%leafmap))
-            pos_err(DST) = max(pos_err(DST), maxval(cg%wa(RNG), mask=cg%leafmap))
+            norm(N_D, DST_) = norm(N_D, DST_) + sum(cg%wa(RNG)**2, mask=cg%leafmap)
+            norm(N_2, DST_) = norm(N_2, DST_) + sum(inid( RNG)**2, mask=cg%leafmap)
+            neg_err(DST_) = min(neg_err(DST_), minval(cg%wa(RNG), mask=cg%leafmap))
+            pos_err(DST_) = max(pos_err(DST_), maxval(cg%wa(RNG), mask=cg%leafmap))
          endif
 
          cgl => cgl%nxt
       enddo
 
-      do i = GAS, DST
+      do i = GAS, DST_
          do j = N_D, N_2
             call piernik_MPI_Allreduce(norm(j, i), pSUM)
          enddo
@@ -618,12 +620,12 @@ contains
       enddo
 
       if (master) then
-         do i = GAS, DST
-            if (i == DST .and. .not. usedust) exit
+         do i = GAS, DST_
+            if (i == DST_ .and. .not. usedust) exit
             select case (i)
                case (GAS)
                   descr = "GAS"
-               case (DST)
+               case (DST_)
                   descr = "DST"
             end select
             if (norm(N_2, i) .notequals. 0.) then

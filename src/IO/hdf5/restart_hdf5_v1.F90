@@ -232,7 +232,7 @@ contains
          area_type = qna%lst(ind)%restart_mode
       else
          if (ind < lbound(wna%lst(:), dim=1) .or. ind > ubound(wna%lst(:), dim=1)) call die("[restart_hdf5_v1:write_arr_to_restart] Invalid 4D array")
-         dim1 = wna%lst(ind)%dim4
+         dim1 = wna%get_dim4(ind)
          rank = rank4
          dname = wna%lst(ind)%name
          area_type = wna%lst(ind)%restart_mode
@@ -341,7 +341,7 @@ contains
       implicit none
 
       integer(HID_T),             intent(in) :: file_id            !< File identifier
-      integer,                    intent(in) :: ind                !< index of cg%q(:) or cg%w(:) arrays
+      integer(kind=4),            intent(in) :: ind                !< index of cg%q(:) or cg%w(:) arrays
       logical,                    intent(in) :: tgt3d              !< .true. for 3D arrays, .false. otherwise
       integer(kind=4),  optional, intent(in) :: alt_area_type
       character(len=*), optional, intent(in) :: alt_name           !< used only in galdisk* setups
@@ -373,7 +373,7 @@ contains
          area_type = qna%lst(ind)%restart_mode
       else
          if (ind < lbound(wna%lst(:), dim=1) .or. ind > ubound(wna%lst(:), dim=1)) call die("[restart_hdf5_v1:read_arr_from_restart] Invalid 4D array")
-         dim1 = wna%lst(ind)%dim4
+         dim1 = wna%get_dim4(ind)
          rank = rank4
          cgname = wna%lst(ind)%name
          area_type = wna%lst(ind)%restart_mode
@@ -466,6 +466,7 @@ contains
 
    subroutine read_restart_hdf5_v1
 
+      use bcast,            only: piernik_MPI_Bcast
       use common_hdf5,      only: output_fname
       use constants,        only: cwdlen, cbuff_len, domlen, idlen, xdim, ydim, zdim, LO, HI, RD
       use dataio_pub,       only: msg, warn, die, printio, require_problem_IC, problem_name, piernik_hdf5_version, fix_string, &
@@ -480,7 +481,7 @@ contains
       use h5lt,             only: h5ltget_attribute_double_f, h5ltget_attribute_int_f, h5ltget_attribute_string_f
       use mass_defect,      only: magic_mass
       use MPIF,             only: MPI_INFO_NULL, MPI_COMM_WORLD
-      use mpisetup,         only: master, piernik_MPI_Bcast, ibuff, rbuff, cbuff, slave
+      use mpisetup,         only: master, ibuff, rbuff, cbuff, slave
       use named_array_list, only: qna, wna
       use timestep_pub,     only: c_all_old, cfl_c, stepcfl
 #ifdef RANDOMIZE
@@ -497,7 +498,7 @@ contains
       implicit none
 
       integer                                  :: nu
-      integer                                  :: i
+      integer(kind=4)                          :: i
       character(len=cwdlen)                    :: filename      !< File name
 
       integer(HID_T)                           :: file_id       !< File identifier
@@ -517,7 +518,7 @@ contains
 
       nu = flind%all
 
-      filename = output_fname(RD, '.res', nres, bcast=.true.)
+      filename = output_fname(RD, '.res', nres, b_cast=.true.)
 
       if (master) then
          write(msg, '(2a)') 'Reading restart file v1: ', trim(filename)

@@ -89,7 +89,7 @@ module cr_data
    logical, dimension(PRES:PRIM)                           :: eO16               !< presence and grad_pcr essentiality of O16 isotope
    logical,                                dimension(nicr) :: eCRSP              !< table of all isotopes presences
    logical,                                dimension(nicr) :: ePRIM              !< table of all PRIMARY presences
-   logical, parameter                                      :: transrelativistic = .false. !< Logical for transrelativistic limit of momentum in CRESP
+   logical, parameter                                      :: transrelativistic = .true. !< Logical for transrelativistic limit of momentum in CRESP
    integer, parameter                                      :: specieslen = 6     !< length of species names
    character(len=specieslen), allocatable, dimension(:)    :: cr_names           !< table of species names
    !character(len=idlen), parameter                         :: p_bnd =  'fix'  !, 'fixed'! impose momentum boundaries to be fixed along time, or able to move  ! BEWARE: src/fluids/cosmicrays/initcrspectrum.F90 also exports some variable named "p_bnd"
@@ -131,43 +131,43 @@ module cr_data
 
 !<====Cross sections for spallation from Garcia-Munoz 1987 (see also Longair)====>
 
-   real, parameter :: sigma_C12_Li7  = 10.   !< mbarn
-   real, parameter :: sigma_C12_Be9  = 6.   !< mbarn
-   real, parameter :: sigma_C12_Be10 = 3.5   !< mbarn
-   !real, parameter :: sigma_C12_B11  = 31.5 !3.5 !< mbarn
-   !real, parameter :: sigma_C12_B10  = 17.3 !3.5 !< mbarn
-
-   real, parameter :: sigma_N14_Li7  = 9.5 !< mbarn
-   !real, parameter :: sigma_N14_Be9  = 4.5!< mbarn
-   !real, parameter :: sigma_N14_Be10  = 2.0 !< mbarn
-   !real, parameter :: sigma_N14_B10  = 16.0 !< mbarn
-   !real, parameter :: sigma_N14_B11  = 15.0 !< mbarn
-
-   real, parameter :: sigma_O16_Li7  = 9.5 !< mbarn
-   real, parameter :: sigma_O16_Be9  = 4.5 !< mbarn
-   real, parameter :: sigma_O16_Be10 = 2.   !< mbarn
-   !real, parameter :: sigma_O16_B10  = 8.3  !< mbarn
-   !real, parameter :: sigma_O16_B11  = 13.9  !< mbarn
+   !real, parameter :: sigma_C12_Li7  = 10.   !< mbarn
+   !real, parameter :: sigma_C12_Be9  = 6.   !< mbarn
+   !real, parameter :: sigma_C12_Be10 = 3.5   !< mbarn
+   !!real, parameter :: sigma_C12_B11  = 31.5 !3.5 !< mbarn
+   !!real, parameter :: sigma_C12_B10  = 17.3 !3.5 !< mbarn
+   !
+   !real, parameter :: sigma_N14_Li7  = 9.5 !< mbarn
+   !!real, parameter :: sigma_N14_Be9  = 4.5!< mbarn
+   !!real, parameter :: sigma_N14_Be10  = 2.0 !< mbarn
+   !!real, parameter :: sigma_N14_B10  = 16.0 !< mbarn
+   !!real, parameter :: sigma_N14_B11  = 15.0 !< mbarn
+   !
+   !real, parameter :: sigma_O16_Li7  = 9.5 !< mbarn
+   !real, parameter :: sigma_O16_Be9  = 4.5 !< mbarn
+   !real, parameter :: sigma_O16_Be10 = 2.   !< mbarn
+   !!real, parameter :: sigma_O16_B10  = 8.3  !< mbarn
+   !!real, parameter :: sigma_O16_B11  = 13.9  !< mbarn
 
 !<====Cross sections for spallation from Génolini et al., 2018 ====>
 
-!   real, parameter :: sigma_C12_Li7  = 6.8   !< mbarn
-!   real, parameter :: sigma_C12_Be9  = 6.8   !< mbarn
-!   real, parameter :: sigma_C12_Be10 = 4.  !< mbarn
-!   real, parameter :: sigma_C12_B11  = 30. !3.5 !< mbarn
-!   real, parameter :: sigma_C12_B10  = 12.3 !3.5 !< mbarn
-!
-!   real, parameter :: sigma_N14_Li7  = 9.3 !< mbarn
-!   real, parameter :: sigma_N14_Be9  = 2.1!< mbarn
-!   real, parameter :: sigma_N14_Be10 = 0. !< mbarn
-!   real, parameter :: sigma_N14_B10  = 10.3 !< mbarn
-!   real, parameter :: sigma_N14_B11  = 17.3 !< mbarn
-!
-!   real, parameter :: sigma_O16_Li7  = 11.2 !< mbarn
-!   real, parameter :: sigma_O16_Be9  = 3.7 !< mbarn
-!   real, parameter :: sigma_O16_Be10 = 2.2   !< mbarn
-!   real, parameter :: sigma_O16_B10  = 10.9  !< mbarn
-!   real, parameter :: sigma_O16_B11  = 18.2  !< mbarn
+   real, parameter :: sigma_C12_Li7  = 6.8   !< mbarn
+   real, parameter :: sigma_C12_Be9  = 6.8   !< mbarn
+   real, parameter :: sigma_C12_Be10 = 4.  !< mbarn
+   real, parameter :: sigma_C12_B11  = 30. !3.5 !< mbarn
+   real, parameter :: sigma_C12_B10  = 12.3 !3.5 !< mbarn
+
+   real, parameter :: sigma_N14_Li7  = 9.3 !< mbarn
+   real, parameter :: sigma_N14_Be9  = 2.1!< mbarn
+   real, parameter :: sigma_N14_Be10 = 0. !< mbarn
+   real, parameter :: sigma_N14_B10  = 10.3 !< mbarn
+   real, parameter :: sigma_N14_B11  = 17.3 !< mbarn
+
+   real, parameter :: sigma_O16_Li7  = 11.2 !< mbarn
+   real, parameter :: sigma_O16_Be9  = 3.7 !< mbarn
+   real, parameter :: sigma_O16_Be10 = 2.2   !< mbarn
+   real, parameter :: sigma_O16_B10  = 10.9  !< mbarn
+   real, parameter :: sigma_O16_B11  = 18.2  !< mbarn
 
 !<====Cross sections for pion production and gamma ray emission from Esslin & Pfrommer, 2004 ====>
 
@@ -211,8 +211,9 @@ contains
 !<
    subroutine init_cr_species
 
+      use bcast,      only: piernik_MPI_Bcast
       use dataio_pub, only: nh
-      use mpisetup,   only: lbuff, master, slave, piernik_MPI_Bcast
+      use mpisetup,   only: lbuff, master, slave
 
       implicit none
 
@@ -326,7 +327,7 @@ contains
 
    subroutine cr_species_tables(ncrsp, crness)
 
-      use constants,  only: I_ONE
+      use constants,  only: I_ONE, V_INFO
       use dataio_pub, only: msg, printinfo, warn
       use mpisetup,   only: master
       use units,      only: me, mp, myr, mbarn, sigma_T
@@ -392,7 +393,7 @@ contains
             cr_gpess(icr)    = eCRSP_ess(i)
             if (master) then
                write(msg,'(a,a,a,l2)') spectral_or_not(cr_spectral(icr)), eCRSP_names(i), 'CR species is present; taken into account for grad_pcr: ', eCRSP_ess(i)
-               call printinfo(msg)
+               call printinfo(msg, V_INFO)
             endif
          endif
       enddo
@@ -426,7 +427,7 @@ contains
          cr_gpess(ncrsp_auto+I_ONE:ncrsp) = crness
          do i = ncrsp_auto+I_ONE, ncrsp
             write(msg,'(a,a,i2,a,l2)') spectral_or_not(cr_spectral(i)), 'user CR species no: ', i,' is present; taken into account for grad_pcr: ', cr_gpess(i)
-            if (master) call printinfo(msg)
+            if (master) call printinfo(msg, V_INFO)
          enddo
       endif
 
@@ -434,7 +435,7 @@ contains
          write(msg, '(a,i3)') 'Total amount of CR species: ', ncrsp
          if (count(cr_spectral) > 0) write(msg(len_trim(msg)+1:), '(a,i3,a)') ' | ', count(cr_spectral), ' spectral component(s)'
          if (ncrsp - ncrsp_auto > 0) write(msg(len_trim(msg)+1:), '(a,i3,a)') ' | ', ncrsp - ncrsp_auto, ' user component(s).'
-         call printinfo(msg)
+         call printinfo(msg, V_INFO)
       endif
 
       if (eCRSP(icr_C12)) then
@@ -442,25 +443,25 @@ contains
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_C12), cr_table(icr_Li7 )) = sigma_C12_Li7
          if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_C12), cr_table(icr_Be9 )) = sigma_C12_Be9
          if (eCRSP(icr_Be10)) cr_sigma(cr_table(icr_C12), cr_table(icr_Be10)) = sigma_C12_Be10
-         !if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B10 )) = sigma_C12_B10
-         !if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B11 )) = sigma_C12_B11
+         if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B10 )) = sigma_C12_B10
+         if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B11 )) = sigma_C12_B11
 
       endif
       if (eCRSP(icr_N14)) then
          cr_primary(cr_table(icr_N14)) = primary_N14
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Li7 )) = sigma_N14_Li7
-         !if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be9 )) = sigma_N14_Be9
-         !if (eCRSP(icr_Be10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be10)) = sigma_N14_Be10
-         !if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B10 )) = sigma_N14_B10
-         !if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B11 )) = sigma_N14_B11
+         if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be9 )) = sigma_N14_Be9
+         if (eCRSP(icr_Be10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be10)) = sigma_N14_Be10
+         if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B10 )) = sigma_N14_B10
+         if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B11 )) = sigma_N14_B11
       endif
       if (eCRSP(icr_O16)) then
          cr_primary(cr_table(icr_O16)) = primary_O16
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_O16), cr_table(icr_Li7 )) = sigma_O16_Li7
          if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_O16), cr_table(icr_Be9 )) = sigma_O16_Be9
          if (eCRSP(icr_Be10)) cr_sigma(cr_table(icr_O16), cr_table(icr_Be10)) = sigma_O16_Be10
-         !if (eCRSP(icr_B10)) cr_sigma(cr_table(icr_O16), cr_table(icr_B10)) = sigma_O16_B10
-         !if (eCRSP(icr_B11)) cr_sigma(cr_table(icr_O16), cr_table(icr_B11)) = sigma_O16_B11
+         if (eCRSP(icr_B10)) cr_sigma(cr_table(icr_O16), cr_table(icr_B10)) = sigma_O16_B10
+         if (eCRSP(icr_B11)) cr_sigma(cr_table(icr_O16), cr_table(icr_B11)) = sigma_O16_B11
       endif
       cr_sigma = cr_sigma * mbarn
       if (eCRSP(icr_Be10)) cr_tau(cr_table(icr_Be10)) = tau_Be10 * myr

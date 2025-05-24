@@ -74,7 +74,7 @@ contains
       class(urc), pointer :: p
 
       if (.not. associated(urc_p)) then
-         if (master) call warn("[unified_ref_crit_list:add] .not. associated(urc_p)")
+         if (master) call warn("[URC_list:add] .not. associated(urc_p)")
          return
       endif
 
@@ -191,6 +191,7 @@ contains
 
    subroutine summary(this)
 
+      use constants,  only: V_VERBOSE
       use dataio_pub, only: msg, printinfo
       use mpisetup,   only: master
 
@@ -200,13 +201,13 @@ contains
 
       logical, save :: first_run = .true.
 
-      write(msg, '(a,i3,a)') "[unified_ref_crit_list:summary] ", this%cnt(), " criteria defined."
+      write(msg, '(a,i3,a)') "[URC_list:summary] ", this%cnt(), " criteria defined."
       if (master) then
          if (this%cnt() /= 0) then  ! unfortunately this%cnt() can not be pure due to pointer assignment
             if (first_run) then
-               call printinfo(msg)
+               call printinfo(msg, V_VERBOSE)
             else
-               call printinfo(trim(msg) // " (update)")
+               call printinfo(trim(msg) // " (update)", V_VERBOSE)
             endif
          endif
       endif
@@ -271,7 +272,7 @@ contains
 
    subroutine create_plotfields(this)
 
-      use constants,              only: INVALID, dsetnamelen
+      use constants,              only: INVALID, dsetnamelen, V_VERBOSE
       use dataio_pub,             only: printinfo, msg, warn
       use named_array_list,       only: qna, wna
       use mpisetup,               only: master
@@ -296,37 +297,37 @@ contains
             class is (urc_var)
                if (p%plotfield .and. p%iplot == INVALID) then
                   p%iplot = new_ref_field()
-                  write(msg, '(3a)') "[unified_ref_crit_list:create_plotfields] refinement criterion of type '", trim(p%rname), "' for '"
+                  write(msg, '(3a)') "[URC_list:create_plotfields] refinement criterion of type '", trim(p%rname), "' for '"
                   if (p%ic /= INVALID) then
                      write(msg(len_trim(msg)+1:), '(2a,i3,a)') trim(wna%lst(p%iv)%name), "(", p%ic, ")"
                   else
                      write(msg(len_trim(msg)+1:), '(a)') trim(qna%lst(p%iv)%name)
                   endif
                   write(msg(len_trim(msg)+1:), '(3a)') "' is stored in array '", trim(ref_n), "'"
-                  if (master) call printinfo(msg)
+                  if (master) call printinfo(msg, V_VERBOSE)
                endif
             class is (urc_jeans)
                if (p%plotfield .and. p%iplot == INVALID) then
                   p%iplot = new_ref_field("nJ")
-                  write(msg, '(3a)') "[unified_ref_crit_list:create_plotfields] Jeans refinement criterion is stored in array '", trim(ref_n), "'"
-                  if (master) call printinfo(msg)
+                  write(msg, '(3a)') "[URC_list:create_plotfields] Jeans refinement criterion is stored in array '", trim(ref_n), "'"
+                  if (master) call printinfo(msg, V_VERBOSE)
                endif
             class is (urc_nbody)
                ! unused at the moment of implementation
                if (p%plotfield .and. p%iplot == INVALID) then
                   p%iplot = new_ref_field("nparticles")
-                  write(msg, '(3a)') "[unified_ref_crit_list:create_plotfields] particle count criterion is stored in array '", trim(ref_n), "'"
-                  if (master) call printinfo(msg)
+                  write(msg, '(3a)') "[URC_list:create_plotfields] particle count criterion is stored in array '", trim(ref_n), "'"
+                  if (master) call printinfo(msg, V_VERBOSE)
                endif
             class is (urc_user)
                if (p%plotfield .and. p%iplot == INVALID) then
                   p%iplot = new_ref_field()
-                  write(msg, '(3a)') "[unified_ref_crit_list:create_plotfields] user-provided refinement criterion is stored in array '", trim(ref_n), "'"
-                  if (master) call printinfo(msg)
+                  write(msg, '(3a)') "[URC_list:create_plotfields] user-provided refinement criterion is stored in array '", trim(ref_n), "'"
+                  if (master) call printinfo(msg, V_VERBOSE)
                endif
             class default
                if (p%iplot /= INVALID) then
-                  write(msg, '(3a)') "[unified_ref_crit_list:create_plotfields] some refinement criterion may be stored in array '", trim(qna%lst(p%iplot)%name), "'"
+                  write(msg, '(3a)') "[URC_list:create_plotfields] some refinement criterion may be stored in array '", trim(qna%lst(p%iplot)%name), "'"
                   if (master) call warn(msg)
                endif
          end select
@@ -356,7 +357,7 @@ contains
                ref_n = suggested
                call all_cg%reg_var(ref_n)
             else
-               call warn("[unified_ref_crit_list:create_plotfields:new_ref_field] suggested name '" // trim(suggested) // "' is already occupied")
+               call warn("[URC_list:create_plotfields:new_ref_field] suggested name '" // trim(suggested) // "' is already occupied")
             endif
          endif
 
@@ -424,7 +425,7 @@ contains
       implicit none
 
       class(urc_list_t),             intent(inout) :: this  !< an object invoking the type-bound procedure
-      type(grid_container), pointer, intent(inout) :: cg    !< current grid piece
+      type(grid_container), pointer, intent(inout) :: cg    !< starting cg, can't use here leaves%first explicitly because of cyclic dependencies
 
       class(urc), pointer :: p
 

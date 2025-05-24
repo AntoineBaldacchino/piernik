@@ -105,13 +105,12 @@ contains
    subroutine init_hdf5(vars)
 
       use constants,      only: dsetnamelen, singlechar
-      use dataio_pub,     only: warn
+      use dataio_pub,     only: warn, msg
       use fluids_pub,     only: has_ion, has_dst, has_neu
       use global,         only: cc_mag
       use mpisetup,       only: master
 #ifdef COSM_RAYS
       use cr_data,        only: cr_names, cr_spectral
-      use dataio_pub,     only: msg
 #endif /* COSM_RAYS */
 #ifdef CRESP
       use cr_data,        only: icr_spc
@@ -124,13 +123,24 @@ contains
 
       integer                                              :: i
       character(len=singlechar)                            :: fc, ord
-      character(len=dsetnamelen)                           :: aux
+      character(len=dsetnamelen)                           :: aux, ifmt
 #ifdef COSM_RAYS
       integer                                              :: k, ke
 #endif /* COSM_RAYS */
 #ifdef CRESP
       integer                                              :: ks
 #endif /* CRESP */
+
+      i = 10  ! Let the default counter be 2-digit wide
+#ifdef COSM_RAYS
+      i = max(i, size(cr_names))
+#endif /* COSM_RAYS */
+#ifdef CRESP
+      i = max(i, ncrb + 1)
+#endif /* CRESP */
+      write(ifmt, '(i9)') i
+      i = len_trim(adjustl(ifmt))  ! convert max number of components into number of required digits
+      write(ifmt,'("i",i1,".",i1,")")') i, i  ! this would fail when i > 9 but the code would fail for billions of components anyway
 
       if (.not. allocated(hdf_vars)) allocate(hdf_vars(0))
 
@@ -203,13 +213,8 @@ contains
                      call append_var(aux)
                   else
                      ke = k - count(cr_spectral)
-                     if (ke <= 99) then
-                        write(aux,'(A2,I2.2)') 'cr', ke
-                        call append_var(aux)
-                     else
-                        write(msg, '(a,i3)')"[common_hdf5:init_hdf5] Cannot create name for CR energy component #", ke
-                        call warn(msg)
-                     endif
+                     write(aux,'(A2,' // ifmt // ')') 'cr', ke
+                     call append_var(aux)
                   endif
                enddo
 #endif /* COSM_RAYS */
@@ -254,33 +259,18 @@ contains
                enddo
             case ('cref') !< CRESP distribution function
                do k = 1, ncrb+1
-                  if (k<=99) then
-                     write(aux,'(A4,I2.2)') 'cref', k
-                     call append_var(aux)
-                  else
-                     write(msg, '(a,i3)')"[common_hdf5:init_hdf5] Cannot create name for CRESP distribution function component #", k
-                     call warn(msg)
-                  endif
+                  write(aux,'(A4,' // ifmt // ')') 'cref', k
+                  call append_var(aux)
                enddo
             case ('crep') !< CRESP cutoff momenta
                do k = 1, 2
-                  if (k<=99) then
-                     write(aux,'(A4,I2.2)') 'crep', k
-                     call append_var(aux)
-                  else
-                     write(msg, '(a,i3)')"[common_hdf5:init_hdf5] Cannot create name for CRESP cutoff momentum component #", k
-                     call warn(msg)
-                  endif
+                  write(aux,'(A4,' // ifmt // ')') 'crep', k
+                  call append_var(aux)
                enddo
             case ('creq') !< CRESP spectrum index
                do k = 1, ncrb
-                  if (k<=99) then
-                     write(aux,'(A4,I2.2)') 'creq', k
-                     call append_var(aux)
-                  else
-                     write(msg, '(a,i3)')"[common_hdf5:init_hdf5] Cannot create name for CRESP spectrum index component #", k
-                     call warn(msg)
-                  endif
+                  write(aux,'(A4,' // ifmt // ')') 'creq', k
+                  call append_var(aux)
                enddo
 #endif /* CRESP */
             case default
@@ -850,6 +840,7 @@ contains
 
    subroutine write_to_hdf5_v2(filename, otype, create_empty_cg_datasets, write_cg_to_hdf5)
 
+      use bcast,        only: piernik_MPI_Bcast
       use cg_leaves,    only: leaves
       use constants,    only: cwdlen, dsetnamelen, xdim, zdim, ndims, I_ONE, I_TWO, I_THREE, I_FOUR, INT4, LO, HI, &
          &                    GEO_XYZ, GEO_RPZ
@@ -864,7 +855,7 @@ contains
       use helpers_hdf5, only: create_attribute!, create_corefile
       use MPIF,         only: MPI_INTEGER, MPI_INTEGER8, MPI_STATUS_IGNORE, MPI_REAL8, MPI_COMM_WORLD
       use MPIFUN,       only: MPI_Allgather, MPI_Recv, MPI_Send
-      use mpisetup,     only: FIRST, LAST, master, err_mpi, piernik_MPI_Bcast
+      use mpisetup,     only: FIRST, LAST, master, err_mpi
 #ifdef NBODY
       use constants,    only: I_FIVE, I_SIX
       !use particle_utils, only: count_all_particles
@@ -1081,6 +1072,8 @@ contains
                if (any(cg_off(g, :) > 2.**31)) &
                   & call die("[common_hdf5:write_to_hdf5_v2] large offsets require better treatment")
 
+               if (otype == O_OUT .and. .not. associated(cg_n_o)) allocate(cg_n_o(cg_n(p), ndims))  ! Prevent crash due to passing unallocated array.
+               ! Ugliness of the above fix suggests overcomplication somewhere.
                call create_empty_cg_datasets(cg_g_id, cg_n_b(g, :), cg_n_o(g, :), Z_avail, cg_npart(g), st_g_id) !!!!!
 #ifdef NBODY
                call h5gclose_f(st_g_id, error)
@@ -1203,7 +1196,6 @@ contains
       use cg_list,        only: cg_list_element
       use constants,      only: LO, HI, I_ONE
 #ifdef NBODY
-      use particle_utils, only: count_cg_particles
       use star_formation, only: pid_gen
 #endif /* NBODY */
 
@@ -1228,7 +1220,7 @@ contains
          cg_n_b(g, :) = cgl%cg%n_b(:)
          cg_off(g, :) = cgl%cg%my_se(:, LO) - cgl%cg%l%off(:)
 #ifdef NBODY
-         cg_npart(g)   = count_cg_particles(cgl%cg)
+         cg_npart(g)   = cgl%cg%count_particles()
          cg_pid_max(g) = pid_gen
 #endif /* NBODY */
          if (otype == O_OUT) then
@@ -1273,18 +1265,19 @@ contains
       endif
    end function set_h5_properties
 
-   function output_fname(wr_rd, ext, no, allproc, bcast, prefix) result(filename)
+   function output_fname(wr_rd, ext, no, allproc, b_cast, prefix) result(filename)
 
+      use bcast,      only: piernik_MPI_Bcast
       use constants,  only: cwdlen, idlen, RD, WR, I_FOUR, domlen, fnamelen
       use dataio_pub, only: problem_name, run_id, res_id, wd_wr, wd_rd, warn, die, msg
-      use mpisetup,   only: master, piernik_MPI_Bcast, proc
+      use mpisetup,   only: master, proc
 
       implicit none
 
       integer(kind=4),       intent(in)           :: wr_rd, no
       character(len=I_FOUR), intent(in)           :: ext
       logical,               intent(in), optional :: allproc
-      logical,               intent(in), optional :: bcast
+      logical,               intent(in), optional :: b_cast
       character(len=*),      intent(in), optional :: prefix
       character(len=cwdlen)                       :: filename, temp  ! File name
       character(len=domlen)                       :: fullext
@@ -1336,8 +1329,8 @@ contains
          end select
       endif
 
-      if (present(bcast)) then
-         if (bcast) call piernik_MPI_Bcast(filename, cwdlen)
+      if (present(b_cast)) then
+         if (b_cast) call piernik_MPI_Bcast(filename, cwdlen)
       endif
 
    end function output_fname
@@ -1367,7 +1360,7 @@ contains
       nio = nio + I_ONE
 ! restart
       exec_mh5f = (multiple_h5files .and. dumptype /= RES)
-      fname = output_fname(WR, extname(dumptype), nio, allproc=exec_mh5f, bcast=(.not.exec_mh5f))
+      fname = output_fname(WR, extname(dumptype), nio, allproc=exec_mh5f, b_cast=(.not.exec_mh5f))
 
       if (.not. master) return
 
@@ -1386,7 +1379,7 @@ contains
    subroutine dump_announce_time
 
       use constants,  only: tmr_hdf
-      use dataio_pub, only: msg, printinfo, thdf
+      use dataio_pub, only: msg, print_plain, thdf
       use mpisetup,   only: master
       use timer,      only: set_timer
 
@@ -1395,7 +1388,7 @@ contains
       thdf = set_timer(tmr_hdf)
       if (master) then
          write(msg,'(a6,f10.2,a2)') ' done ', thdf, ' s'
-         call printinfo(msg, .true.)
+         call print_plain(msg, .false.)
       endif
 
    end subroutine dump_announce_time

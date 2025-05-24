@@ -25,12 +25,18 @@
 # task (and hopefully nothing else), you may inspect all the bt_*_* files,
 # which now should contain the backtrace from the point where the processes
 # were killed.  A deadlock typically occurs when some processes have to wait
-# for some other processes, while these are waiting for yet something else. 
+# for some other processes, while these are waiting for yet something else.
 # Typically this can be identified in the backtraces as a partially
 # divergent call stacks: some processes have completed certain procedures
 # and went ahead while other processes are stuck few lines earlier for some
 # reason.
 #
+# Since it is not an easy task for human to spot difference in few or few
+# tens of backtrace files, you may use bin/gdb_find_div_in_bt to attempt
+# automatical identification of the divergence point. This script will
+# present to which point the backtrace is the same for all threads and first
+# two entries that differ.
+#
 # Good luck!
 
-gdb -q -ex "set logging file bt_${HOSTNAME}_$$" -ex "set logging on" -ex "r" -ex "bt" -ex "quit" ./piernik
+gdb --batch -q -ex "set logging file bt_${HOSTNAME}_$$" -ex "set logging enabled on" -ex "set debuginfod enabled off" -ex "r" -ex "bt" -ex "quit" ./piernik

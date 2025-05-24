@@ -118,12 +118,13 @@ contains
 !<
    subroutine init_cosmicrays
 
+      use bcast,       only: piernik_MPI_Bcast
       use constants,       only: cbuff_len, I_ONE, I_TWO, half, big, O_I2, O_I3, base_level_id
       use cr_data,         only: init_cr_species, cr_species_tables, cr_gpess, cr_spectral, ncrsp_auto
       use diagnostics,     only: ma1d, my_allocate
       use dataio_pub,      only: die, warn, nh
       use func,            only: operator(.notequals.)
-      use mpisetup,        only: ibuff, rbuff, lbuff, cbuff, master, slave, piernik_MPI_Bcast
+      use mpisetup,        only: ibuff, rbuff, lbuff, cbuff, master, slave
 #ifdef CRESP
       use diagnostics,     only: ma2d
 #endif /* CRESP */
@@ -380,14 +381,18 @@ contains
       flind%crn%pos = flind%components
 
 #ifdef CRESP
+      print *, 'in initcosmicrays: '
       if (.not. allocated(flind%crspcs)) allocate(flind%crspcs(nspc))
 !     flind%crspc%nbeg, flind%crspc%nend, flind%crspc%ebeg, flind%crspc%eend are not used in this approach
 
       do icr = 1, nspc        !< Arrange iterable indexes for each spectral species separately; first indexes for n, then e.
+         print *, 'icr: ', icr
          flind%crspcs(icr)%nbeg = flind%crn%end + I_ONE + (icr - I_ONE) * ncr2b  !< Arrange flind indexes too!
          flind%crspcs(icr)%nend = flind%crspcs(icr)%nbeg - I_ONE + ncrb
          flind%crspcs(icr)%ebeg = flind%crspcs(icr)%nend + I_ONE
          flind%crspcs(icr)%eend = flind%crspcs(icr)%ebeg - I_ONE + ncrb
+         print *, 'flind%crspcs(',icr,')%nbeg: ', flind%crspcs(icr)%nbeg
+         print *, 'flind%crspcs(',icr,')%nend: ', flind%crspcs(icr)%nend
 
          iarr_crspc2_n(icr, :) = [(jnb, jnb = flind%crspcs(icr)%nbeg, flind%crspcs(icr)%nend)]
          iarr_crspc2_e(icr, :) = [(jnb, jnb = flind%crspcs(icr)%ebeg, flind%crspcs(icr)%eend)] ! iarr_crspc_e(I_ONE + (icr - I_ONE) * ncrb: ncrb + (icr - I_ONE) * ncrb)
@@ -396,6 +401,10 @@ contains
          iarr_crspc_e(1 + (icr - I_ONE) * ncrb: icr * ncrb) = iarr_crspc2_e(icr, :)
 
       enddo
+
+
+      print *, 'flind%crspc%nbeg: ', flind%crspc%nbeg
+      print *, 'flind%crspc%nend: ', flind%crspc%nend
 
       flind%crspcs(:)%all = ncr2b
 

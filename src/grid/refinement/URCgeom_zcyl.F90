@@ -69,7 +69,7 @@ contains
 
    function init(rp) result(this)
 
-      use constants,  only: base_level_id, ndims, LO, HI
+      use constants,  only: base_level_id, ndims, LO, HI, V_VERBOSE
       use dataio_pub, only: printinfo, msg
       use domain,     only: dom
       use mpisetup,   only: master
@@ -100,7 +100,7 @@ contains
       this%ijk_c  = uninit
       if (master) then
          write(msg, '(a,3g13.5,a,3g13.5,a,i3)')"[URC zcyl]  Initializing cylindrical refinement in a box: [ ", this%coords(:, LO), " ]..[ ", this%coords(:, HI), " ] at level ", this%level
-         call printinfo(msg)
+         call printinfo(msg, V_VERBOSE)
       endif
 
    end function init
@@ -129,9 +129,9 @@ contains
 
       if (this%enough_level(cg%l%id)) return
 
-      if (allocated(this%ijk_lo) .neqv. allocated(this%ijk_hi)) call die("[unified_ref_crit_geometrical_zcyl:mark_zcyl] inconsistent alloc (lo|hi)")
-      if (allocated(this%ijk_lo) .neqv. allocated(this%ijk_c))  call die("[unified_ref_crit_geometrical_zcyl:mark_zcyl] inconsistent alloc (lo|c)")
-      if (.not. allocated(this%ijk_lo)) call die("[unified_ref_crit_geometrical_zcyl:mark_zcyl] ijk_{lo,hi,c} not allocated")
+      if (allocated(this%ijk_lo) .neqv. allocated(this%ijk_hi)) call die("[URCgeom_zcyl:mark_zcyl] inconsistent alloc (lo|hi)")
+      if (allocated(this%ijk_lo) .neqv. allocated(this%ijk_c))  call die("[URCgeom_zcyl:mark_zcyl] inconsistent alloc (lo|c)")
+      if (.not. allocated(this%ijk_lo)) call die("[URCgeom_zcyl:mark_zcyl] ijk_{lo,hi,c} not allocated")
 
       ! Have some new levels of refinement appeared in the meantime?
       if ( any(this%ijk_lo(cg%l%id, :) == uninit) .or. &

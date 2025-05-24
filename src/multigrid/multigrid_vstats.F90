@@ -32,12 +32,12 @@
 module multigrid_vstats
 ! pulled by MULTIGRID
 
+   use constants, only: dsetnamelen
+
    implicit none
 
    private
    public :: vcycle_stats
-
-   integer, parameter :: prefix_len = 3              !< length of prefix for distinguishing V-cycles in the log
 
    type :: vcycle_stats
       real, allocatable, dimension(:) :: factor      !< norm reduction factor
@@ -45,7 +45,7 @@ module multigrid_vstats
       integer                         :: count       !< number of executed V-cycles
       real                            :: norm_rhs    !< norm of the source
       real                            :: norm_final  !< norm of the defect relative to the source
-      character(len=prefix_len)       :: cprefix     !< prefix for distinguishing V-cycles in the log (e.g inner or outer potential, CR component)
+      character(len=dsetnamelen)      :: cprefix     !< prefix for distinguishing V-cycles in the log (e.g inner or outer potential, CR component)
    contains
       procedure :: init                              !< Initialize vcycle_stats
       procedure :: brief_v_log                       !< Assembles one-line log of V-cycle achievements
@@ -101,7 +101,7 @@ contains
       use constants,     only: fplen, fmt_len
       use mpisetup,      only: slave
       use dataio_pub,    only: msg, warn, printinfo
-      use multigridvars, only: stdout
+      use multigridvars, only: v_mg
 
       implicit none
 
@@ -134,7 +134,7 @@ contains
          if (len(msg) >= lm + 9) msg(lm+2:lm+9) = normred(1:8)
       enddo
 
-      call printinfo(msg, stdout)
+      call printinfo(msg, v_mg, .true.)
 
    end subroutine brief_v_log
 

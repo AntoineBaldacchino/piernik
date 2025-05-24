@@ -35,7 +35,7 @@
 
 module dataio
 
-   use dataio_pub, only: domain_dump, fmin, fmax, vizit, nend, tend, wend, res_id, &
+   use dataio_pub, only: domain_dump, nend, tend, wend, res_id, &
         &                nrestart, problem_name, run_id, multiple_h5files, use_v2_io, &
         &                nproc_io, enable_compression, gzip_level, gdf_strict, h5_64bit
    use constants,  only: fmt_len, cbuff_len, msg_len, dsetnamelen, RES, TSL
@@ -48,7 +48,6 @@ module dataio
 
    integer, parameter       :: nvarsmx = 50          !< maximum number of variables to dump in hdf files
    character(len=cbuff_len) :: restart               !< choice of restart %file: if restart = 'last': automatic choice of the last restart file regardless of "nrestart" value; if something else is set: "nrestart" value is fixing
-   integer(kind=4)          :: resdel                !< number of recent restart dumps which should be saved; each n-resdel-1 restart file is supposed to be deleted while writing n restart file
    real                     :: dt_hdf                !< time between successive hdf dumps
    real                     :: dt_res                !< simulation time between successive restart file dumps
    real                     :: wdt_res               !< walltime between successive restart file dumps
@@ -80,6 +79,7 @@ module dataio
    logical                  :: colormode             !< enable color messages using ANSI escape modes
 
    type(wallclock)          :: walltime_nextres      !< wallclock used for dumping restarts every n hours
+   character(len=cbuff_len) :: verbosity             !< set desired verbosity level
 
    type :: tsl_container
       logical :: dummy
@@ -103,10 +103,10 @@ module dataio
    end type tsl_container
 
    namelist /END_CONTROL/     nend, tend, wend
-   namelist /RESTART_CONTROL/ restart, res_id, nrestart, resdel
+   namelist /RESTART_CONTROL/ restart, res_id, nrestart
    namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, init_hdf_dump, init_res_dump,    &
-                              domain_dump, vars, pvars, vizit, fmin, fmax, user_message_file, system_message_file, multiple_h5files, &
-                              use_v2_io, nproc_io, enable_compression, gzip_level, colormode, wdt_res, gdf_strict, h5_64bit
+                              domain_dump, vars, pvars, user_message_file, system_message_file, multiple_h5files, &
+                              use_v2_io, nproc_io, enable_compression, gzip_level, colormode, wdt_res, gdf_strict, h5_64bit, verbosity
 
 contains
 
@@ -131,7 +131,6 @@ contains
 !! <tr><td>restart </td><td>'last'</td><td>'last' or another string of characters</td><td>\copydoc dataio::restart     </td></tr>
 !! <tr><td>res_id  </td><td>''    </td><td>string of characters                  </td><td>\copydoc dataio_pub::res_id  </td></tr>
 !! <tr><td>nrestart</td><td>3     </td><td>integer                               </td><td>\copydoc dataio_pub::nrestart</td></tr>
-!! <tr><td>resdel  </td><td>0     </td><td>integer                               </td><td>\copydoc dataio::resdel      </td></tr>
 !! </table>
 !! \n \n
 !! @b OUTPUT_CONTROL
@@ -150,9 +149,6 @@ contains
 !! <tr><td>domain_dump        </td><td>'phys_domain'      </td><td>'phys_domain' or 'full_domain'                       </td><td>\copydoc dataio_pub::domain_dump</td></tr>
 !! <tr><td>vars               </td><td>''                 </td><td>'dens', 'velx', 'vely', 'velz', 'ener' and some more </td><td>\copydoc dataio::vars  </td></tr>
 !! <tr><td>pvars              </td><td>''                 </td><td>'ppos', 'pvel', 'pacc', 'mass', 'ener' and some more </td><td>\copydoc dataio::pvars </td></tr>
-!! <tr><td>vizit              </td><td>.false.            </td><td>logical   </td><td>\copydoc dataio_pub::vizit        </td></tr>
-!! <tr><td>fmin               </td><td>                   </td><td>real      </td><td>\copydoc dataio_pub::fmin         </td></tr>
-!! <tr><td>fmax               </td><td>                   </td><td>real      </td><td>\copydoc dataio_pub::fmax         </td></tr>
 !! <tr><td>user_message_file  </td><td>trim(wd_rd)//'/msg'</td><td>string similar to default value              </td><td>\copydoc dataio::user_message_file  </td></tr>
 !! <tr><td>system_message_file</td><td>'/tmp/piernik_msg' </td><td>string of characters similar to default value</td><td>\copydoc dataio::system_message_file</td></tr>
 !! <tr><td>multiple_h5files   </td><td>.false.            </td><td>logical   </td><td>\copydoc dataio_pub::multiple_h5files</td></tr>
@@ -163,25 +159,26 @@ contains
 !! <tr><td>gzip_level         </td><td>9                  </td><td>integer   </td><td>\copydoc dataio_pub::gzip_level   </td></tr>
 !! <tr><td>colormode          </td><td>.true.             </td><td>logical   </td><td>\copydoc dataio_pub::colormode    </td></tr>
 !! <tr><td>h5_64bit           </td><td>.false.            </td><td>logical   </td><td>\copydoc dataio_pub::h5_64bit     </td></tr>
+!! <tr><td>verbosity          </td><td>"default"          </td><td>string    </td><td>\copydoc dataio_pub::verbosity    </td></tr>
 !! </table>
 !! \n \n
 !<
    subroutine init_dataio_parameters
 
-      use constants,  only: cwdlen, PIERNIK_INIT_MPI, INVALID
-      use dataio_pub, only: nrestart, last_hdf_time, last_res_time, last_tsl_time, last_log_time, log_file_initialized, &
-           &                tmp_log_file, printinfo, printio, warn, msg, die, code_progress, log_wr, restarted_sim, &
-           &                move_file, parfile, parfilelines, log_file, maxparlen, maxparfilelines, can_i_write, ierrh, par_file
-      use mpisetup,   only: master, nproc, proc, piernik_MPI_Bcast, piernik_MPI_Barrier, FIRST, LAST
+      use barrier,      only: piernik_MPI_Barrier
+      use bcast,        only: piernik_MPI_Bcast
+      use constants,    only: cwdlen, PIERNIK_INIT_MPI, INVALID, V_DEBUG
+      use dataio_pub,   only: nrestart, last_hdf_time, last_res_time, last_tsl_time, last_log_time, log_file_initialized, &
+           &                  tmp_log_file, printinfo, printio, warn, msg, die, code_progress, log_wr, restarted_sim, &
+           &                  move_file, parfile, parfilelines, log_file, maxparlen, maxparfilelines, can_i_write, ierrh, par_file
+      use mpisetup,     only: master, nproc, proc, FIRST, LAST
 
       implicit none
 
       integer              :: system_status, i, ip, par_lun
       logical, allocatable, dimension(:) :: can_write
 
-#ifdef VERBOSE
-      if (master) call printinfo("[dataio:init_dataio_parameters] Commencing dataio module initialization")
-#endif /* VERBOSE */
+      if (master) call printinfo("[dataio:init_dataio_parameters] Commencing dataio module initialization", V_DEBUG)
 
       if (code_progress < PIERNIK_INIT_MPI) call die("[dataio:init_dataio_parameters] Some physics modules are not initialized.")
 
@@ -260,9 +257,11 @@ contains
 
    subroutine dataio_par_io
 
-      use constants,  only: idlen, cbuff_len, INT4
-      use dataio_pub, only: nres, nrestart, warn, nhdf, wd_rd, multiple_h5files, warn, h5_64bit, nh, set_colors
-      use mpisetup,   only: lbuff, ibuff, rbuff, cbuff, master, slave, nproc, piernik_MPI_Bcast
+      use bcast,      only: piernik_MPI_Bcast
+      use constants,  only: idlen, cbuff_len, INT4, V_SILENT, V_DEBUG, V_VERBOSE, V_INFO, V_ESSENTIAL, V_WARN, v_name
+      use dataio_pub, only: nres, nrestart, warn, nhdf, wd_rd, multiple_h5files, warn, h5_64bit, nh, set_colors, piernik_verbosity
+      use mpisetup,   only: lbuff, ibuff, rbuff, cbuff, master, slave, nproc
+
       implicit none
 
       problem_name  = "nameless"
@@ -271,7 +270,6 @@ contains
                               ! if something else is set: "nrestart" value is fixing
       res_id        = ''
       nrestart      = 3
-      resdel        = 0
 
       dt_hdf        = 0.0
       dt_res        = 0.0
@@ -310,6 +308,7 @@ contains
 
       colormode = .true.
       h5_64bit  = .false.
+      verbosity = "default"
 
       if (master) then
 
@@ -381,15 +380,14 @@ contains
          rbuff(2)  = wend
 
 
-!   namelist /RESTART_CONTROL/ restart, res_id, nrestart, resdel
+!   namelist /RESTART_CONTROL/ restart, res_id, nrestart
          cbuff(20) = restart
          cbuff(21) = res_id
 
          ibuff(20) = nrestart
-         ibuff(21) = resdel
 
 !   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, init_hdf_dump, init_res_dump, &
-!                              domain_dump, vars, vizit, fmin, fmax, user_message_file, system_message_file, multiple_h5files,     &
+!                              domain_dump, vars, user_message_file, system_message_file, multiple_h5files,     &
 !                              use_v2_io, nproc_io, enable_compression, gzip_level, colormode, wdt_res, gdf_strict, h5_64bit
          ibuff(43) = nproc_io
          ibuff(44) = gzip_level
@@ -398,26 +396,24 @@ contains
          rbuff(41) = dt_res
          rbuff(42) = dt_tsl
          rbuff(43) = dt_log
-         rbuff(45) = fmin
-         rbuff(46) = fmax
-         rbuff(47) = wdt_res
+         rbuff(44) = wdt_res
 
-         lbuff(1)  = vizit
-         lbuff(2)  = multiple_h5files
-         lbuff(3)  = use_v2_io
-         lbuff(5)  = init_hdf_dump
-         lbuff(6)  = init_res_dump
-         lbuff(7)  = tsl_with_mom
-         lbuff(8)  = tsl_with_ptc
-         lbuff(9)  = colormode
-         lbuff(10) = gdf_strict
-         lbuff(11) = h5_64bit
+         lbuff(1)  = multiple_h5files
+         lbuff(2)  = use_v2_io
+         lbuff(3)  = init_hdf_dump
+         lbuff(4)  = init_res_dump
+         lbuff(5)  = tsl_with_mom
+         lbuff(6)  = tsl_with_ptc
+         lbuff(7)  = colormode
+         lbuff(8)  = gdf_strict
+         lbuff(9)  = h5_64bit
 
          cbuff(20) = user_message_file
          cbuff(21) = system_message_file
 
          cbuff(31) = problem_name
          cbuff(32) = run_id
+         cbuff(33) = verbosity
          cbuff(40) = domain_dump
 
          do iv = 1, nvarsmx
@@ -442,15 +438,14 @@ contains
          tend                = rbuff(1)
          wend                = rbuff(2)
 
-!   namelist /RESTART_CONTROL/ restart, res_id, nrestart, resdel
+!   namelist /RESTART_CONTROL/ restart, res_id, nrestart
          restart             = trim(cbuff(20))
          res_id              = trim(cbuff(21))
 
          nrestart            = int(ibuff(20), kind=4)
-         resdel              = ibuff(21)
 
 !   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, init_hdf_dump, init_res_dump, &
-!                              domain_dump, vars, vizit, fmin, fmax, user_message_file, system_message_file, multiple_h5files,     &
+!                              domain_dump, vars, user_message_file, system_message_file, multiple_h5files,     &
 !                              use_v2_io, nproc_io, enable_compression, gzip_level, colormode, wdt_res, gdf_strict
 
          nproc_io            = int(ibuff(43), kind=4)
@@ -460,26 +455,24 @@ contains
          dt_res              = rbuff(41)
          dt_tsl              = rbuff(42)
          dt_log              = rbuff(43)
-         fmin                = rbuff(45)
-         fmax                = rbuff(46)
-         wdt_res             = rbuff(47)
+         wdt_res             = rbuff(44)
 
-         vizit               = lbuff(1)
-         multiple_h5files    = lbuff(2)
-         use_v2_io           = lbuff(3)
-         init_hdf_dump       = lbuff(5)
-         init_res_dump       = lbuff(6)
-         tsl_with_mom        = lbuff(7)
-         tsl_with_ptc        = lbuff(8)
-         colormode           = lbuff(9)
-         gdf_strict          = lbuff(10)
-         h5_64bit            = lbuff(11)
+         multiple_h5files    = lbuff(1)
+         use_v2_io           = lbuff(2)
+         init_hdf_dump       = lbuff(3)
+         init_res_dump       = lbuff(4)
+         tsl_with_mom        = lbuff(5)
+         tsl_with_ptc        = lbuff(6)
+         colormode           = lbuff(7)
+         gdf_strict          = lbuff(8)
+         h5_64bit            = lbuff(9)
 
          user_message_file   = trim(cbuff(20))
          system_message_file = trim(cbuff(21))
 
          problem_name        = cbuff(31)
          run_id              = cbuff(32)(1:idlen)
+         verbosity           = cbuff(33)
          domain_dump         = trim(cbuff(40))
 
          do iv = 1, nvarsmx
@@ -493,13 +486,32 @@ contains
 
       call set_colors(colormode)
 
+      select case (trim(verbosity))
+         case ("silent", trim(v_name(V_SILENT)))
+            piernik_verbosity = V_SILENT
+         case (trim(v_name(V_DEBUG)))
+            piernik_verbosity = V_DEBUG
+         case (trim(v_name(V_VERBOSE)))
+            piernik_verbosity = V_VERBOSE
+         case ("", "default", "info", "normal", trim(v_name(V_INFO)))
+            piernik_verbosity = V_INFO
+         case ("laconic", trim(v_name(V_ESSENTIAL)))
+            piernik_verbosity = V_ESSENTIAL
+         case ("warning", trim(v_name(V_WARN)))
+            piernik_verbosity = V_WARN
+            if (master) call warn("[dataio:dataio_par_io] only warnings are allowed")
+         case default
+            piernik_verbosity = V_INFO
+            if (master) call warn("[dataio:dataio_par_io] non recognized verbosity level '" // trim(verbosity) // "', defaulting to '" // trim(v_name(piernik_verbosity)) // "'")
+      end select
+
    end subroutine dataio_par_io
 
 !> \brief Initialize these I/O variables that may depend on any other modules (called at the end of init_piernik)
 
    subroutine init_dataio
 
-      use constants,    only: PIERNIK_INIT_IO_IC
+      use constants,    only: PIERNIK_INIT_IO_IC, V_DEBUG, V_LOG
       use dataio_pub,   only: code_progress, die, maxenvlen, nres, nrestart, printinfo, restarted_sim, warn
       use domain,       only: dom
       use mpisetup,     only: master
@@ -537,9 +549,10 @@ contains
          if (maxval(dom%edge) < 1.) fg_fmt = "f12.9"
          if ((maxval(dom%edge) > 1e6) .or. (maxval(dom%edge) < 1e-4)) fg_fmt = "e12.5"
 
-         write(fmt_loc,  '(2(a,i1),a)') "(2x,a12,a3,'  = ',es16.9,16x,            ", dom%eff_dim+1, "(1x,i4),", dom%eff_dim, "(1x," // fg_fmt // "))"
-         write(fmt_dtloc,'(2(a,i1),a)') "(2x,a12,a3,'  = ',es16.9,'  dt=',es11.4, ", dom%eff_dim+1, "(1x,i4),", dom%eff_dim, "(1x," // fg_fmt // "))"
-         write(fmt_vloc, '(2(a,i1),a)') "(2x,a12,a3,'  = ',es16.9,'   v=',es11.4, ", dom%eff_dim+1, "(1x,i4),", dom%eff_dim, "(1x," // fg_fmt // "))"
+         ! ToDo: autodetect the number of processes and highest cell numbers
+         write(fmt_loc,  '(2(a,i1),a)') "(2x,a12,a3,'  = ',es16.9,16x,            ", dom%eff_dim+1, "(1x,i6),", dom%eff_dim, "(1x," // fg_fmt // "))"
+         write(fmt_dtloc,'(2(a,i1),a)') "(2x,a12,a3,'  = ',es16.9,'  dt=',es11.4, ", dom%eff_dim+1, "(1x,i6),", dom%eff_dim, "(1x," // fg_fmt // "))"
+         write(fmt_vloc, '(2(a,i1),a)') "(2x,a12,a3,'  = ',es16.9,'   v=',es11.4, ", dom%eff_dim+1, "(1x,i6),", dom%eff_dim, "(1x," // fg_fmt // "))"
       endif
 
 
@@ -562,9 +575,9 @@ contains
 
       call init_version
       if (master) then
-         call printinfo("###############     Source configuration     ###############", .false.)
+         call printinfo("###############     Source configuration     ###############", V_LOG)
          do i = 1, nenv
-            call printinfo(env(i), .false.)
+            call printinfo(env(i), V_LOG)
          enddo
       endif
       maxenvlen = int(maxval(len_trim(env(:nenv))), kind=4)
@@ -575,7 +588,7 @@ contains
 
       if (restarted_sim) then
 #ifdef HDF5
-         if (master) call printinfo("###############     Reading restart     ###############", .false.)
+         if (master) call printinfo("###############     Reading restart     ###############", V_LOG)
          call read_restart_hdf5
          nstep_start = nstep
          t_start     = t
@@ -586,12 +599,10 @@ contains
 #endif /* !HDF5 */
       endif
 
-#ifdef VERBOSE
-      call printinfo("[dataio:init_dataio] finished. \o/")
-#endif /* VERBOSE */
-
       walltime_nextres = wallclock(0, 0, "until next restart")
       if (master) tn = walltime_nextres%time_left(wdt_res)
+
+      if (master) call printinfo("[dataio:init_dataio] finished. \o/", V_DEBUG)
 
    end subroutine init_dataio
 
@@ -617,11 +628,15 @@ contains
 
    subroutine user_msg_handler(end_sim)
 
-      use dataio_pub,   only: msg, printinfo, warn
-      use load_balance, only: umsg_verbosity, V_HOST
-      use mpisetup,     only: master, piernik_MPI_Bcast
+      use bcast,        only: piernik_MPI_Bcast
+      use cg_leaves,    only: leaves
+      use constants,    only: I_ONE, V_LOWEST, V_ESSENTIAL, V_HIGHEST, v_name
+      use dataio_pub,   only: msg, printinfo, warn, piernik_verbosity
+      use load_balance, only: umsg_verbosity, VB_HOST
+      use mpisetup,     only: master
       use ppp,          only: umsg_request
       use procnames,    only: pnames
+      use refinement,   only: emergency_fix
       use timer,        only: walltime_end
 #ifdef HDF5
       use data_hdf5,    only: write_hdf5
@@ -662,12 +677,12 @@ contains
                   umsg_request = max(1, int(umsg_param))
                   write(msg,'(a,i6,a)') "[dataio:user_msg_handler] enable PPP for ", umsg_request, &
                        " step" // trim(merge(" ", "s", umsg_request == 1))
-                  if (master) call printinfo(msg)
+                  if (master) call printinfo(msg, V_ESSENTIAL)
                else
                   if (master) call warn("[dataio:user_msg_handler] Cannot convert the parameter to integer")
                endif
             case ('perf')
-               if (umsg_param <= 0.) umsg_param = V_HOST
+               if (umsg_param <= 0.) umsg_param = VB_HOST
                if (abs(umsg_param) < huge(1_4)) then
                   umsg_verbosity = int(umsg_param, kind=4)
                else
@@ -703,6 +718,16 @@ contains
             case ('unexclude')
                call pnames%enable_all
                ! manual excluding may be helpful too, but we need to pass a list, like "exclude 2,7-9,32769", and process it safely
+            case ('refine')
+               emergency_fix = .true.
+            case ("+v", "v+")
+               piernik_verbosity = max(piernik_verbosity - I_ONE, V_LOWEST)
+               if (master) call printinfo("[dataio:user_msg_handler] Verbosity level raised to '" // trim(v_name(piernik_verbosity)) // "'", piernik_verbosity)
+            case ("-v", "v-")
+               piernik_verbosity = min(piernik_verbosity + I_ONE, V_HIGHEST)
+               if (master) call printinfo("[dataio:user_msg_handler] Verbosity level lowered to '" // trim(v_name(piernik_verbosity)) // "'", piernik_verbosity)
+            case ('balance')
+               call leaves%balance_and_update(" (u-balance ) ")
             case ('help')
                if (master) then
                   write(msg,*) "[dataio:user_msg_handler] Recognized messages:", char(10), &
@@ -715,15 +740,19 @@ contains
 #endif /* HDF5 */
                   &"  log       - update logfile", char(10), &
                   &"  tsl       - write a timeslice", char(10), &
+                  &"  +v        - be more verbose", char(10), &
+                  &"  -v        - be less verbose", char(10), &
+                  &"  refine    - call refinement_update as soon as possible", char(10), &
+                  &"  balance   - call rebalance as soon as possible", char(10), &
                   &"  ppp [N]   - start ppp_main profiling for N timesteps (default 1)", char(10), &
                   &"  unexclude - reset thread exclusion mask", char(10), &
-                  &"  perf [N]  - print performance data with verbosity N (default V_HOST)", char(10), &
+                  &"  perf [N]  - print performance data with verbosity N (default VB_HOST)", char(10), &
                   &"  wleft     - show how much walltime is left", char(10), &
                   &"  wresleft  - show how much walltime is left till next restart", char(10), &
                   &"  sleep <number> - wait <number> seconds", char(10), &
                   &"  wend|wdtres|tend|nend|dtres|dthdf|dtlog|dttsl <value> - update specified parameter with <value>", char(10), &
                   &"Note that only one line at a time is read."
-                  call printinfo(msg)
+                  call printinfo(msg, V_ESSENTIAL)
                endif
             case default
                if (master) then
@@ -771,10 +800,11 @@ contains
       use constants,    only: FINAL_DUMP, LOGF
       use dataio_user,  only: user_post_write_data
 #ifdef HDF5
+      use bcast,        only: piernik_MPI_Bcast
       use constants,    only: HDF
       use data_hdf5,    only: write_hdf5
       use dataio_pub,   only: last_res_time, last_hdf_time
-      use mpisetup,     only: master, piernik_MPI_Bcast
+      use mpisetup,     only: master
       use restart_hdf5, only: write_restart_hdf5
 #endif /* HDF5 */
 
@@ -808,6 +838,31 @@ contains
 #endif /* HDF5 */
       if (associated(user_post_write_data)) call user_post_write_data(output, dump)
 
+#ifdef HDF5
+   contains
+
+      subroutine manage_hdf_dump(dumptype, dmp, output)
+
+         use constants,  only: INCEPTIVE, RES
+         use dataio_pub, only: nres
+
+         implicit none
+
+         integer(kind=4), intent(in)    :: dumptype !< type of dump
+         integer(kind=4), intent(in)    :: output   !< type of output call
+         logical,         intent(inout) :: dmp      !< perform I/O if True
+
+         if (output /= INCEPTIVE) return
+         if ((dumptype == HDF) .and. init_hdf_dump) dmp = .true.  !< \todo problem_name may be enhanced by '_initial', but this and nhdf should be reverted just after write_hdf5 is called
+         if ((dumptype == RES) .and. init_res_dump .and. nres == 0) then
+            dmp = .true.
+            nres = -1
+         endif
+
+      end subroutine manage_hdf_dump
+
+#endif /* HDF5 */
+
    end subroutine write_data
 
    subroutine determine_dump(dmp, last_dump_time, dt_dump, output, dumptype)
@@ -829,26 +884,6 @@ contains
       dmp = (dmp .or. output == dumptype)
 
    end subroutine determine_dump
-
-   subroutine manage_hdf_dump(dumptype, dmp, output)
-
-      use constants,  only: INCEPTIVE, HDF, RES
-      use dataio_pub, only: nres
-
-      implicit none
-
-      integer(kind=4), intent(in)    :: dumptype !< type of dump
-      integer(kind=4), intent(in)    :: output   !< type of output call
-      logical,         intent(inout) :: dmp      !< perform I/O if True
-
-      if (output /= INCEPTIVE) return
-      if ((dumptype == HDF) .and. init_hdf_dump) dmp = .true.  !< \todo problem_name may be enhanced by '_initial', but this and nhdf should be reverted just after write_hdf5 is called
-      if ((dumptype == RES) .and. init_res_dump .and. nres == 0) then
-         dmp = .true.
-         nres = -1
-      endif
-
-   end subroutine manage_hdf_dump
 
    subroutine check_log
 
@@ -922,6 +957,7 @@ contains
 
    subroutine write_timeslice
 
+      use allreduce,        only: piernik_MPI_Allreduce
       use cg_cost_data,     only: I_OTHER
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
@@ -940,7 +976,7 @@ contains
       use global,           only: t, dt, smalld, nstep
       use grid_cont,        only: grid_container
       use mass_defect,      only: update_tsl_magic_mass
-      use mpisetup,         only: master, piernik_MPI_Allreduce
+      use mpisetup,         only: master
       use named_array_list, only: wna
       use ppp,              only: ppp_main
 #ifdef GRAV
@@ -1282,15 +1318,19 @@ contains
 !!  Common log print (short - without assoc value)
 !<
    subroutine cmnlog_s(fmt_, title, id, ess)
+
+      use constants,  only: V_LOG
       use dataio_pub, only: msg, printinfo
       use domain,     only: dom
       use types,      only: value
+
       implicit none
+
       character(len=*), intent(in) :: fmt_, title, id
       type(value),      intent(in) :: ess
 
       write(msg, fmt_)  title, id, ess%val, ess%proc, pack(ess%loc,dom%has_dir), pack(ess%coords,dom%has_dir)
-      call printinfo(msg, .false.)
+      call printinfo(msg, V_LOG)
 
    end subroutine cmnlog_s
 
@@ -1298,15 +1338,19 @@ contains
 !!  Common log print (long - including assoc value)
 !<
    subroutine cmnlog_l(fmt_, title, id, ess)
+
+      use constants,  only: V_LOG
       use dataio_pub, only: msg, printinfo
       use domain,     only: dom
       use types,      only: value
+
       implicit none
+
       character(len=*), intent(in) :: fmt_, title, id
       type(value),      intent(in) :: ess
 
       write(msg, fmt_) title, id, ess%val, ess%assoc, ess%proc, pack(ess%loc,dom%has_dir), pack(ess%coords,dom%has_dir)
-      call printinfo(msg, .false.)
+      call printinfo(msg, V_LOG)
 
    end subroutine cmnlog_l
 
@@ -1325,8 +1369,8 @@ contains
       use named_array_list, only: qna
       use units,            only: mH, kboltz
 #ifdef ISO
+      use allreduce,        only: piernik_MPI_Allreduce
       use constants,        only: pMIN, pMAX
-      use mpisetup,         only: piernik_MPI_Allreduce
 #else /* !ISO */
       use constants,        only: DST, I_ZERO
 #ifdef MAGNETIC
@@ -1616,7 +1660,7 @@ contains
       use cg_leaves,          only: leaves
       use cg_list,            only: cg_list_element
       use constants,          only: idlen, small, MAXL, PPP_IO
-      use dataio_pub,         only: printinfo
+      use dataio_pub,         only: printinfo, print_char_line
       use fluidindex,         only: flind
       use fluids_pub,         only: has_dst, has_ion, has_neu
       use func,               only: L2norm
@@ -1626,9 +1670,9 @@ contains
       use ppp,                only: ppp_main
       use types,              only: value
 #ifdef COSM_RAYS
+      use allreduce,          only: piernik_MPI_Allreduce
       use constants,          only: pMIN
       use fluidindex,         only: iarr_all_crn
-      use mpisetup,           only: piernik_MPI_Allreduce
       use timestepcosmicrays, only: dt_crs
 #endif /* COSM_RAYS */
 #ifdef CRESP
@@ -1642,7 +1686,7 @@ contains
       use constants,          only: MINL
 #endif /* COSM_RAYS || MAGNETIC */
 #ifdef MAGNETIC
-      use constants,          only: DIVB_HDC, I_ZERO, RIEMANN_SPLIT, half
+      use constants,          only: DIVB_HDC, I_ZERO, RIEMANN_SPLIT, half, V_LOG
       use dataio_pub,         only: msg
       use func,               only: sq_sum3
       use global,             only: cfl, divB_0_method, which_solver, cc_mag
@@ -1936,12 +1980,12 @@ contains
 
       if (master)  then
          if (.not.present(tsl)) then
-            call printinfo('================================================================================================================', .false.)
+            call print_char_line('=')
             if (has_ion) then
                call common_shout(flind%ion%snap,'ION',.true.,.true.,.true.)
 #ifdef MAGNETIC
                id = "ION"
-               write(msg, fmt_dtloc) 'max(c_f)    ', id, cfi_max%val, cfi_max%assoc ; call printinfo(msg, .false.)
+               write(msg, fmt_dtloc) 'max(c_f)    ', id, cfi_max%val, cfi_max%assoc ; call printinfo(msg, V_LOG)
                call cmnlog_l(fmt_dtloc, 'max(v_a)    ', id, vai_max)
 #endif /* MAGNETIC */
             endif
@@ -1994,7 +2038,7 @@ contains
             id = "PRT"
             call cmnlog_l(fmt_dtloc, 'max(|acc|)  ', id, pacc_max)
 #endif /* NBODY */
-            call printinfo('================================================================================================================', .false.)
+            call print_char_line('=')
          else
 #ifdef MAGNETIC
             tsl%b_min = b_min%val
@@ -2036,7 +2080,7 @@ contains
 
       subroutine print_memory_usage
 
-         use constants,    only: I_ONE, INVALID
+         use constants,    only: I_ONE, INVALID, V_DEBUG
          use dataio_pub,   only: msg, printinfo
          use memory_usage, only: system_mem_usage
          use MPIF,         only: MPI_INTEGER, MPI_COMM_WORLD
@@ -2058,7 +2102,7 @@ contains
                     trim(kMGTP(minval(real(cnt_rss)))), "/", &
                     trim(kMGTP(maxval(real(cnt_rss)))), &
                     ". Total RSS memory:", trim(kMGTP(sum(real(cnt_rss)))), "."
-               call printinfo(msg, .false.)
+               call printinfo(msg, V_DEBUG)
             endif
          endif
 
@@ -2102,7 +2146,7 @@ contains
 !-------------------------------------------------------------------------
 
 !> \todo process multiple commands at once
-      use constants,  only: msg_len
+      use constants,  only: msg_len, V_ESSENTIAL
       use dataio_pub, only: msg, printinfo, warn
       use mpisetup,   only: master
 #if defined(__INTEL_COMPILER)
@@ -2177,7 +2221,7 @@ contains
             endif
             close(msg_lun)
 
-            if (len_trim(msg) > 0 .and. master) call printinfo(msg)
+            if (len_trim(msg) > 0 .and. master) call printinfo(msg, V_ESSENTIAL)
 
             sz = len_trim(msg)
             if (fname(i) == user_message_file) then

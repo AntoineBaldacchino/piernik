@@ -61,7 +61,7 @@ contains
 
    function init(rp) result(this)
 
-      use constants,  only: base_level_id, ndims
+      use constants,  only: base_level_id, ndims, V_VERBOSE
       use dataio_pub, only: printinfo, msg
       use mpisetup,   only: master
       use refinement, only: ref_point
@@ -79,7 +79,7 @@ contains
       this%ijk = uninit
       if (master) then
          write(msg, '(a,3g13.5,a,i3)')"[URC point] Initializing refinement at point: [ ", this%coords, " ] at level ", this%level
-         call printinfo(msg)
+         call printinfo(msg, V_VERBOSE)
       endif
 
    end function init
@@ -103,7 +103,7 @@ contains
 
       if (this%enough_level(cg%l%id)) return
 
-      if (.not. allocated(this%ijk)) call die("[unified_ref_crit_geometrical_point:mark_point] ijk not allocated")
+      if (.not. allocated(this%ijk)) call die("[URCgeom_point:mark_point] ijk not allocated")
 
       ! Have some new levels of refinement appeared in the meantime?
       if (any(this%ijk(cg%l%id, :) == uninit)) call this%init_lev

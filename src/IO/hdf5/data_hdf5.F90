@@ -117,11 +117,13 @@ contains
          case ("magdir")
             f%fu = "\rm{radians}"
 #ifdef COSM_RAYS
+         ! ToDo: Adopt for wider range
          case ("cr01" : "cr99")
             f%fu = "\rm{erg}/\rm{cm}^3"
             f%f2cgs = 1.0 / (erg/cm**3)
 #endif /* COSM_RAYS */
 #ifdef CRESP
+         ! ToDo: Adopt for wider range
          case ("cr_e-n01" : "cr_e-n99")
              f%fu = "\rm{erg}/\rm{cm}^3" ! rest mass energy times number density
              f%f2cgs = 1.0 / (erg/cm**3)
@@ -403,11 +405,13 @@ contains
 #endif /* MAGNETIC */
 #ifdef CRESP
       use initcrspectrum,   only: dfpq
-      use named_array_list, only: wna
 #endif /* CRESP */
 #ifdef COSM_RAYS
       use cr_data,          only: cr_names, cr_spectral, icr_spc
       use initcosmicrays,   only: ncrn
+      use cr_data,          only: cr_names, cr_spectral
+      use dataio_pub,       only: die, warn, msg
+      use named_array_list, only: wna, na_var_4d
 #endif /* COSM_RAYS */
 #ifndef ISO
       use units,            only: kboltz, mH
@@ -424,15 +428,14 @@ contains
       integer(kind=4)                                :: i_xyz
       integer                                        :: ii, jj, kk, icr
 #ifdef COSM_RAYS
+      integer(kind=4)                                :: clast
       integer                                        :: i
       integer, parameter                             :: auxlen = dsetnamelen - 1
       character(len=auxlen)                          :: aux
-      !character(len=*)                               :: vname
+      character(len=I_TWO)                           :: varn2
 #endif /* COSM_RAYS */
 #ifdef CRESP
-      character(len=I_TWO)                           :: varn2
       integer                                        :: ibin
-      integer(kind=4)                                :: clast
 #endif /* CRESP */
 
       call common_shortcuts(var, fl_dni, i_xyz)
@@ -458,26 +461,38 @@ contains
          case ("cr01" : "cr99")
             read(var,'(A2,I2.2)') aux, i !> \deprecated BEWARE 0 <= i <= 99, no other indices can be dumped to hdf file
             tab(:,:,:) = cg%u(flind%crn%beg+i-1, RNG)
+            select type(l => wna%lst(wna%fi))
+               class is (na_var_4d)
+                  if (trim(var) /= trim(l%compname(flind%crn%beg+i-1))) then
+                     write(msg, '(5a,i3)') "cr_01-99 '", trim(var), "' /= '", trim(l%compname(flind%crn%beg+i-1)), "' ", i
+                     call warn(msg)
+                  endif
+               class default
+                  call die("[datafields_hdf5] 'cr01-99' not a na_var_4d")
+            end select
          case ('cr_A000' : 'cr_zz99')
             do i = 1, size(cr_names)
                if (var == trim('cr_' // cr_names(i))) then
                   tab(:,:,:) = cg%u(flind%crn%beg+i-1, RNG)
                endif
             enddo
-
             !print *, 'cr_names: ', cr_names
 
 #endif /* COSM_RAYS */
 #ifdef CRESP
             clast = len(trim(var), kind=4)
             varn2 = var(clast - 1:clast)
+            !print *, 'cr_names: ', cr_names
+            !print *, 'cr_spectral: ', cr_spectral
             if (var(clast - 2:clast - 2) == 'e') then
 
             !part of the code for spectrally resolved species : energy density
+            print *, 'ncrn: ', ncrn
 
                read (varn2,'(I2.2)') ibin
                do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3)) icr = i - ncrn
+                  print *, 'i: ,', i
+                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i !-ncrn
                enddo
                tab(:,:,:) = cg%u(flind%crspcs(icr)%ebeg+ibin-1, RNG)
 
@@ -486,8 +501,9 @@ contains
             !part of the code for spectrally resolved species : number density
 
                read (varn2,'(I2.2)') ibin
+
                do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3)) icr = i - ncrn
+                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i !-ncrn
                enddo
 
                !print *, 'flind%crspcs(icr)%nbeg+ibin-1: ', flind%crspcs(icr)%nbeg+ibin-1
@@ -724,11 +740,12 @@ contains
 
    subroutine h5_write_to_single_file_v2(fname)
 
-      use constants,   only: PPP_IO
-      use common_hdf5, only: write_to_hdf5_v2, O_OUT
-      use gdf,         only: gdf_create_root_group
-      use mpisetup,    only: master, piernik_MPI_Barrier
-      use ppp,         only: ppp_main
+      use barrier,      only: piernik_MPI_Barrier
+      use constants,    only: PPP_IO
+      use common_hdf5,  only: write_to_hdf5_v2, O_OUT
+      use gdf,          only: gdf_create_root_group
+      use mpisetup,     only: master
+      use ppp,          only: ppp_main
 
       implicit none
 

@@ -463,14 +463,15 @@ contains
 
    subroutine subtract_average(this, iv)
 
+      use allreduce,        only: piernik_MPI_Allreduce
       use cg_cost_data,     only: I_OTHER
       use cg_list,          only: cg_list_element
       use constants,        only: GEO_XYZ, GEO_RPZ, pSUM
       use dataio_pub,       only: die
       use domain,           only: dom
       use grid_cont,        only: grid_container
-      use mpisetup,         only: piernik_MPI_Allreduce
 #ifdef DEBUG
+      use constants,        only: V_DEBUG
       use dataio_pub,       only: msg, printinfo
       use mpisetup,         only: master
       use named_array_list, only: qna
@@ -518,7 +519,7 @@ contains
 #ifdef DEBUG
       if (master) then
          write(msg, '(2a,2(a,g15.7))')"[cg_list_dataop:subtract_average] Average of '",qna%lst(iv)%name,"' over volume ",vol," is ",avg
-         call printinfo(msg)
+         call printinfo(msg, V_DEBUG)
       endif
 #endif /* DEBUG */
 
@@ -534,13 +535,13 @@ contains
 
    real function norm_sq(this, iv, nomask) result (norm)
 
+      use allreduce,    only: piernik_MPI_Allreduce
       use cg_cost_data, only: I_OTHER
       use cg_list,      only: cg_list_element
       use constants,    only: GEO_XYZ, GEO_RPZ, pSUM
       use dataio_pub,   only: die
       use domain,       only: dom
       use grid_cont,    only: grid_container
-      use mpisetup,     only: piernik_MPI_Allreduce
 
       implicit none
 
@@ -595,10 +596,10 @@ contains
 
    real function scalar_product(this, var1, var2)
 
+      use allreduce,    only: piernik_MPI_Allreduce
       use cg_cost_data, only: I_OTHER
       use cg_list,      only: cg_list_element
       use constants,    only: pSUM
-      use mpisetup,     only: piernik_MPI_Allreduce
 
       implicit none
 
@@ -775,7 +776,7 @@ contains
       enddo
 
       do iw = lbound(wna%lst, dim=1, kind=4), ubound(wna%lst, dim=1, kind=4)
-         do iv = 1, wna%lst(iw)%dim4
+         do iv = 1, wna%get_dim4(iv)
             call this%check_dirty(iw, label, expand=expand, subfield=iv, warn_only=warn_only)
          enddo
       enddo
@@ -786,18 +787,19 @@ contains
 
    subroutine check_dirty(this, iv, label, expand, subfield, warn_only)
 
+      use allreduce,        only: piernik_MPI_Allreduce
       use cg_list,          only: cg_list_element
       use constants,        only: dirtyL, pSUM
       use dataio_pub,       only: warn, msg, die
       use domain,           only: dom
       use global,           only: dirty_debug, show_n_dirtys, no_dirty_checks
-      use mpisetup,         only: proc, master, piernik_MPI_Allreduce
+      use mpisetup,         only: proc, master
       use named_array_list, only: qna, wna
 
       implicit none
 
       class(cg_list_dataop_t),   intent(inout) :: this      !< level which we are checking
-      integer(kind=4),           intent(in)    :: iv        !< index of variable in cg%q(:) which we want to check
+      integer(kind=4),           intent(in)    :: iv        !< index of variable in cg%q(:) or cg%w(:) which we want to check
       character(len=*),          intent(in)    :: label     !< label to indicate the origin of call
       integer(kind=4), optional, intent(in)    :: expand    !< also check guardcells
       integer(kind=4), optional, intent(in)    :: subfield  !< when present use it to check cg%w array
@@ -810,7 +812,8 @@ contains
 
       if (present(subfield)) then
          if (iv < lbound(wna%lst, dim=1) .or. iv > ubound(wna%lst, dim=1)) call die("[cg_list_dataop:check_dirty] Invalid w-variable index.")
-         if (subfield < 1 .or. subfield > wna%lst(iv)%dim4) call die("[cg_list_dataop:check_dirty] Invalid w-variable component.")
+         if (subfield < 1) call die("[cg_list_dataop:check_dirty] w-variable component < 1.")
+         if (subfield > wna%get_dim4(iv)) call die("[cg_list_dataop:check_dirty] w-variable component too big.")
       else
          if (iv < lbound(qna%lst, dim=1) .or. iv > ubound(qna%lst, dim=1)) call die("[cg_list_dataop:check_dirty] Invalid q-variable index.")
       endif

@@ -74,7 +74,6 @@
  /
 
  $MULTIGRID_SOLVER
-!    stdout = .true.
     dirty_debug = .false.
  /
 
@@ -105,4 +104,3 @@
 
  $AMR
  /
-

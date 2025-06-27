@@ -974,8 +974,6 @@ contains
       real                                     :: c
       logical                                  :: exit_code
 
-      !print *, 'In init_state'
-
       max_ic = [I_ZERO, ncrb]
       fail_count_interpol = 0
       fail_count_NR_2dim  = 0
@@ -987,180 +985,189 @@ contains
       init_e = zero
       init_n = zero
 
-      !print *, 'p_init: ', p_init
+      print *, 'in cresp init state'
+
+      print *, 'p_init: ', p_init
 
       do i_spc = 1, nspc
-         !print *, 'i_spc (in init_state): ', i_spc
-        f = zero ; q = zero ; p = zero ; n = zero ; e = zero
+         print *, 'i_spc (in init_state): ', i_spc
+         f = zero ; q = zero ; p = zero ; n = zero ; e = zero
 
-! reading initial values of p_cut
-        !print *, 'p_cut: ', p_cut
-        !!print *, 'p_init: ', p_i
-        p_cut = p_init(:,i_spc)
+   ! reading initial values of p_cut
+         print *, 'p_cut: ', p_cut
+         print *, 'p_init: ', p_init
+         p_cut = p_init(:,i_spc)
 
-      p         = p_fix       ! actual array of p including free edges, p_fix shared via initcrspectrum
-      !p(max_ic) = p_cut
+	print *, 'p_fix: ', p_fix
 
-! Sorting bin edges - arbitrary chosen p_cut may need to be sorted to appear in growing order
-        do k = ncrb, 1, -1
+         p         = p_fix       ! actual array of p including free edges, p_fix shared via initcrspectrum
+         p(max_ic) = p_cut
+
+   ! Sorting bin edges - arbitrary chosen p_cut may need to be sorted to appear in growing order
+         do k = ncrb, 1, -1
             do i = 0, k-1
-                if (p(i) > p(i+1)) then
-                c = p(i)
-                p(i) = p(i+1)
-                p(i+1) = c
-                endif
+               if (p(i) > p(i+1)) then
+                  c = p(i)
+                  p(i) = p(i+1)
+                  p(i+1) = c
+               endif
             enddo
-        enddo
+         enddo
 
-        i_cut = max_ic
+         i_cut = max_ic
 
-! we only need cresp_init_state to derive (n, e) from initial (f, p_cut). For this purpose only 'active bins', i_cut are needed.
+   ! we only need cresp_init_state to derive (n, e) from initial (f, p_cut). For this purpose only 'active bins', i_cut are needed.
 
-        i_cut = get_i_cut(p_cut)
+         i_cut = get_i_cut(p_cut)
 
-        !print *, 'i_spc, p_cut, i_cut =', i_spc, p_cut, i_cut
+         print *, 'i_spc, p_cut, i_cut =', i_spc, p_cut, i_cut
 
-        do co = LO, HI
-            if (abs(p_init(co,i_spc) - p_fix(i_cut(co)+oz(co)-1)) <= eps ) then
-                write(msg, *) "[cresp_crspectrum:cresp_init_state] p_init(",bound_name(co),") = p_fix(i_cut(",bound_name(co),"): (in/dec)crementing i_cut(",bound_name(co),") index to avoid FPE"
-                if (master) call warn(msg)
-                i_cut(co) = i_cut(co) + pm(co)
-            endif
-        enddo
+         do co = LO, HI
+               if (abs(p_init(co,i_spc) - p_fix(i_cut(co)+oz(co)-1)) <= eps ) then
+                  write(msg, *) "[cresp_crspectrum:cresp_init_state] p_init(",bound_name(co),") = p_fix(i_cut(",bound_name(co),"): (in/dec)crementing i_cut(",bound_name(co),") index to avoid FPE"
+                  if (master) call warn(msg)
+                  i_cut(co) = i_cut(co) + pm(co)
+               endif
+         enddo
 
-        is_active_bin = .false.
-        is_active_bin(i_cut(LO)+1:i_cut(HI)) = .true.
-        num_active_bins = count(is_active_bin)
-        allocate(active_bins(num_active_bins))
-        active_bins = pack(cresp_all_bins, is_active_bin)
+         is_active_bin = .false.
+         is_active_bin(i_cut(LO)+1:i_cut(HI)) = .true.
+         num_active_bins = count(is_active_bin)
+         allocate(active_bins(num_active_bins))
+         active_bins = pack(cresp_all_bins, is_active_bin)
 
-! Pure power law spectrum initial condition (default case)
+   ! Pure power law spectrum initial condition (default case)
 
-        q = q_init(i_spc)
-        f = f_init(i_spc) * (p/p_init(LO, i_spc))**(-q_init(i_spc))
+         q = q_init(i_spc)
+         f = zero
+         f = f_init(i_spc) * (p/p_init(LO, i_spc))**(-q_init(i_spc))
 
-        !print *, 'p_init : ', p_init
-        !print *, 'f_init : ', f_init
-        !print *, 'q_init : ', q_init
+        print *, 'p_init : ', p_init
+        print *, 'f_init : ', f_init
+        print *, 'q_init : ', q_init
 
-        select case (initial_spectrum)
-            case ('powl')
-                call cresp_init_powl_spectrum(i_spc)
-            case ('brpg')
-                call cresp_init_brpg_spectrum(i_spc)
-            case ('plpc')
-                call cresp_init_plpc_spectrum(i_spc)
-            case ('brpl')
-                call cresp_init_brpl_spectrum(i_spc)
-            case ('symf')
-                call cresp_init_symf_spectrum(i_spc)
-            case ('syme')
-                call cresp_init_syme_spectrum(i_spc)
-            case ('bump')
-                call cresp_init_bump_spectrum(i_spc)
-            case default
-                write(msg,"(A,A,A)") "[cresp_crspectrum:cresp_init_state] Provided unrecognized initial_spectrum (",initial_spectrum,"). Make sure that value is correctly provided."
-                call die(msg)
-        end select
+         select case (initial_spectrum)
+             case ('powl')
+                 call cresp_init_powl_spectrum(i_spc)
+             case ('brpg')
+                 call cresp_init_brpg_spectrum(i_spc)
+             case ('plpc')
+                 call cresp_init_plpc_spectrum(i_spc)
+             case ('brpl')
+                 call cresp_init_brpl_spectrum(i_spc)
+             case ('symf')
+                 call cresp_init_symf_spectrum(i_spc)
+             case ('syme')
+                 call cresp_init_syme_spectrum(i_spc)
+             case ('bump')
+                 call cresp_init_bump_spectrum(i_spc)
+             case default
+                 write(msg,"(A,A,A)") "[cresp_crspectrum:cresp_init_state] Provided unrecognized initial_spectrum (",initial_spectrum,"). Make sure that value is correctly provided."
+                 call die(msg)
+         end select
 
-        if (e_small_approx_init_cond > 0) then  ! Possible bug: len(p_bnd) == idlen == 3
-            do co = LO, HI
-                if (p_bnd=='mov') then
-                  call get_fqp_cutoff(co, i_spc, exit_code)
-                  if (exit_code) then
-                     write(msg,"(a,a,a,i3)") "[cresp_crspectrum:cresp_init_state] e_small_approx_init_cond = 1, but failed to solve initial spectrum cutoff '",bound_name(co),"' for CR component #", i_spc
-                     call die(msg)
-                  endif
-                else if (p_bnd=='fix') then
-                  p_cut(co)     = p_fix(i_cut(co))
-                  p(i_cut(co))  = p_fix(i_cut(co))
-                endif
-                !print *, 'p_cut(',co,') : ', p_cut(co)
-            enddo
-            !stop
+         if (e_small_approx_init_cond > 0) then  ! Possible bug: len(p_bnd) == idlen == 3
+             do co = LO, HI
+                 if (p_bnd=='mov') then
+		   print *, 'in moving boundaries'
+                   call get_fqp_cutoff(co, i_spc, exit_code)
+                   if (exit_code) then
+                      write(msg,"(a,a,a,i3)") "[cresp_crspectrum:cresp_init_state] e_small_approx_init_cond = 1, but failed to solve initial spectrum cutoff '",bound_name(co),"' for CR component #", i_spc
+                      call die(msg)
+                   endif
+                 else if (p_bnd=='fix') then
+                   p_cut(co)     = p_fix(i_cut(co))
+                   p(i_cut(co))  = p_fix(i_cut(co))
+                 endif
+                 print *, 'p_cut(',co,') : ', p_cut(co)
+             enddo
+             !stop
 
-            if (allow_source_spectrum_break) then
+             if (allow_source_spectrum_break) then
 
-                i_ch = get_i_cut(p_cut)
+                 i_ch = get_i_cut(p_cut)
 
-                p(i_ch)     = p_cut
-                q(i_ch+oz)  = q(i_cut+oz)
-                f(i_ch(LO)) = e_small_to_f(p_cut(LO))
-                f(i_ch(HI)) = e_small_to_f(p_cut(HI))
+                 p(i_ch)     = p_cut
+                 q(i_ch+oz)  = q(i_cut+oz)
+                 f(i_ch(LO)) = e_small_to_f(p_cut(LO))
+                 f(i_ch(HI)) = e_small_to_f(p_cut(HI))
 
-                !print *, 'if allow source spectrum break selected'
+                 !print *, 'if allow source spectrum break selected'
 
-                do i = i_ch(LO)+1, i_cut(LO)
-                p(i) = p_fix(i)
-                f(i) = f(i_ch(LO)) * (p_fix(i)/p(i_ch(LO)))**(-q(i_ch(LO)+1))
-                q(i+1) = q(i_ch(LO)+1)
-                enddo
+                 do i = i_ch(LO)+1, i_cut(LO)
+                    p(i) = p_fix(i)
+                    f(i) = f(i_ch(LO)) * (p_fix(i)/p(i_ch(LO)))**(-q(i_ch(LO)+1))
+                    q(i+1) = q(i_ch(LO)+1)
+                 enddo
 
-                do i = i_cut(HI), i_ch(HI)-1
-                p(i) = p_fix(i)
-                f(i) = f(i_cut(HI)-1)* (p_fix(i)/p_fix(i_cut(HI)-1))**(-q(i_cut(HI)))
-                q(i) = q(i_cut(HI))
-                enddo
+                 do i = i_cut(HI), i_ch(HI)-1
+                    p(i) = p_fix(i)
+                    f(i) = f(i_cut(HI)-1)* (p_fix(i)/p_fix(i_cut(HI)-1))**(-q(i_cut(HI)))
+                    q(i) = q(i_cut(HI))
+                 enddo
 
 #ifdef CRESP_VERBOSED
-                write (msg,"(A,2I3,A,2I3)") "Boundary bins now (i_lo_new i_lo | i_up_new i_up)",  i_ch(LO), i_cut(LO), ' |', i_ch(HI), i_cut(HI)     ; call printinfo(msg)
+                 write (msg,"(A,2I3,A,2I3)") "Boundary bins now (i_lo_new i_lo | i_up_new i_up)",  i_ch(LO), i_cut(LO), ' |', i_ch(HI), i_cut(HI)     ; call printinfo(msg)
 #endif /* CRESP_VERBOSED */
 
-                i_cut = i_ch
-                p(i_cut(HI)) = p_cut(HI)
+                 i_cut = i_ch
+                 p(i_cut(HI)) = p_cut(HI)
 
-                is_active_bin = .false.
-                is_active_bin(i_cut(LO)+1:i_cut(HI)) = .true.
-                num_active_bins = count(is_active_bin) ! active arrays must be reevaluated - number of active bins and edges might have changed
-                if (allocated(active_bins)) deallocate(active_bins)
-                allocate(active_bins(num_active_bins)) ! active arrays must be reevaluated - number of active bins and edges might have changed
-                active_bins = pack(cresp_all_bins, is_active_bin)
+                 is_active_bin = .false.
+                 is_active_bin(i_cut(LO)+1:i_cut(HI)) = .true.
+                 num_active_bins = count(is_active_bin) ! active arrays must be reevaluated - number of active bins and edges might have changed
+                 if (allocated(active_bins)) deallocate(active_bins)
+                 allocate(active_bins(num_active_bins)) ! active arrays must be reevaluated - number of active bins and edges might have changed
+                 active_bins = pack(cresp_all_bins, is_active_bin)
 
-                e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(i_spc, 0:ncrb-1), q(1:ncrb), active_bins, i_spc) ! once again we must count n and e
-                n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
-            endif
-        endif
+                 e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(i_spc, 0:ncrb-1), q(1:ncrb), active_bins, i_spc) ! once again we must count n and e
+                 n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
+             endif
+         endif
 
-        if (dfpq%any_dump) then
-            crel%p = p
-            crel%f = f
-            crel%q = q
-            crel%e = e
-            crel%n = n
-            crel%i_cut = i_cut
-        endif
+         if (dfpq%any_dump) then
+             crel%p = p
+             crel%f = f
+             crel%q = q
+             crel%e = e
+             crel%n = n
+             crel%i_cut = i_cut
+         endif
 
-        if (master) call check_init_spectrum(i_spc)
+         if (master) call check_init_spectrum(i_spc)
 
-        n_tot0 = sum(n)
-        e_tot0 = sum(e)
+         n_tot0 = sum(n)
+         e_tot0 = sum(e)
 
-        init_n(i_spc,:) = n(:)
-        init_e(i_spc,:) = e(:)
-
-
-        !print *, 'call check_init_spectrum + the end !'
-        !print *, 'act.bins: ', active_bins
-        !print *, 'i_cut : ', i_cut
-        !print *, 'p     : ', p
-        !print *, 'q     : ', q
-        !print *, 'n     : ', n
-        !print *, 'e     : ', e
-        !print *, 'n_tot0 =', n_tot0
-        !print *, 'e_tot0 =', e_tot0
-
-        ! Test for consistency of conversion (f,q) <--> (n,e)
-        ! Compute power indexes for each bin at [t], from n and ekin
-        call ne_to_q(n, e, q, active_bins, i_spc)
-        ! Compute f on left bin faces at [t]
-        f = nq_to_f(p(0:ncrb-1), p(1:ncrb), n(1:ncrb), q(1:ncrb), active_bins)
-        !print *, 'test f =',  f
-        !print *, 'test q =',  q
+         init_n(i_spc,:) = n(:)
+         init_e(i_spc,:) = e(:)
 
 
-        total_init_cree(i_spc) = sum(e) !< total_init_cree value is used for initial spectrum scaling when spectrum is injected by source.
-        call deallocate_active_arrays
+         print *, 'call check_init_spectrum + the end !'
+         print *, 'act.bins: ', active_bins
+         print *, 'i_cut : ', i_cut
+         print *, 'p     : ', p
+         print *, 'q     : ', q
+         print *, 'n     : ', n
+         print *, 'e     : ', e
+         print *, 'n_tot0 =', n_tot0
+         print *, 'e_tot0 =', e_tot0
+
+         ! Test for consistency of conversion (f,q) <--> (n,e)
+         ! Compute power indexes for each bin at [t], from n and ekin
+         !call ne_to_q(n, e, q, active_bins, i_spc)
+         ! Compute f on left bin faces at [t]
+         !f = nq_to_f(p(0:ncrb-1), p(1:ncrb), n(1:ncrb), q(1:ncrb), active_bins)
+         print *, 'test f =',  f
+         print *, 'test q =',  q
+
+
+         total_init_cree(i_spc) = sum(e) !< total_init_cree value is used for initial spectrum scaling when spectrum is injected by source.
+         call deallocate_active_arrays
       enddo
+
+      print *, 'end cresp init state'
+      !stop
 
    end subroutine cresp_init_state
 
@@ -1243,15 +1250,26 @@ contains
       integer(kind=4)                            :: i_br, i
       integer,                        intent(in) :: i_spc
 
+      print *, 'in init_plpc: '
+
       p_range_add(:) = zero
       i_br = int(minloc(abs(p_fix - p_br_init(LO, i_spc)), dim=1), kind=4) - I_ONE
       ic = get_i_cut(p_init(:,i_spc))
 
+      print *, 'i_br: ', i_br
+      print *, 'ic: ', ic
+
       p_range_add(ic(LO):ic(HI)) = p_fix(ic(LO):ic(HI))
       p_range_add(ic)            = p_init(:,i_spc)
 
+      print *, 'p_fix(',ic(LO),':',ic(HI),'): ', p_fix(ic(LO):ic(HI))
+      print *, 'p_init: ', p_init(:,i_spc)
+      print *, 'p_range_add(',ic,'): ', p_range_add(ic)
+
       f(ic(LO):ic(HI)) = f_init(i_spc) * (p_range_add(ic(LO):ic(HI))/p_br_init(LO, i_spc))**(-q_init(i_spc))
-      q(ic(LO)+1:ic(HI)) = q_init(i_spc)
+      q(ic(LO):ic(HI)) = q_init(i_spc)
+
+      print *, 'f(',ic(LO),':',ic(HI),'): ', f(ic(LO):ic(HI))
 
       if (.not.allocated(act_bins )) allocate( act_bins(ic(HI) - ic(LO)+1))
       act_bins = cresp_all_bins(ic(LO)+1:ic(HI))
@@ -1290,8 +1308,12 @@ contains
          q(i) = pf_to_q(p_range_add(i-1), p_range_add(i), f(i-1), f(i))
       enddo
 
+      print *, 'q: ', q
+
       n = n + fq_to_n(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), q(1:ncrb), act_bins)
       e = e + fq_to_e(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), g_fix(i_spc, 0:ncrb-1), q(1:ncrb), act_bins, i_spc)
+
+      print *, 'e (in init_plpc): ', e
 
       call my_deallocate(act_bins)
 
@@ -1487,11 +1509,11 @@ contains
       real,    dimension(1:ncrb)        :: fq_to_e
 
       fq_to_e = zero
-      !!print *, 'g_l(bins) : ', g_l(bins)
-      !!print *, 'p_l(bins) : ', p_l(bins)
+      !print *, 'g_l(bins) : ', g_l(bins)
+      !print *, 'p_l(bins) : ', p_l(bins)
       !!print *, 'three_p_s(bins) : ', three_ps(i_spc,bins)
       !!print *, 'q(bins)   : ', q(bins)
-      e_bins = fpcc * f_l(bins) * g_l(bins) * p_l(bins)**three
+      e_bins = fpcc * f_l(bins) * p_l(bins)**4
       where (abs(q(bins) - three_ps(i_spc,bins)) > eps)
          e_bins = e_bins*((p_r(bins)/p_l(bins))**(three_ps(i_spc,bins) - q(bins)) - one)/(three_ps(i_spc,bins) - q(bins))
       elsewhere
@@ -1879,7 +1901,7 @@ contains
 
       q = zero
       j = one
-      !!print *, 'i_spc : ', i_spc
+
       do i_active = 1 + approx_p(LO), size(bins) - approx_p(HI)
          exit_code = .false.
          i = bins(i_active)
@@ -1930,8 +1952,6 @@ contains
          endif
          if (exit_code) fail_count_comp_q(i) = fail_count_comp_q(i) + I_ONE
       enddo
-
-      !!print *, 'q : ', q
 
    end subroutine ne_to_q
 
@@ -2067,12 +2087,17 @@ contains
       qi    = i_cut(cutoff) + oz(cutoff)
       call assoc_pointers(cutoff)
 
+      !print *, 'qi: ', qi
+      !print *, 'e(',qi,'): ', e(qi)
+      !print *, 'n(',qi,'): ', n(qi)
+      !print *, 'g_fix(',i_spc,ipfix,'): ', g_fix(i_spc,ipfix)
+
       alpha = e(qi)/(n(qi) * g_fix(i_spc,ipfix))
-      !!print *, 'alpha: ', alpha
+      !print *, 'alpha: ', alpha
       n_in  = n(qi)
-      !!print *, 'n_in:', n_in
+      !print *, 'n_in:', n_in
       x_NR = intpol_pf_from_NR_grids(cutoff, alpha, n_in, interpolated)
-      !!print *, 'x_NR:', x_NR
+      !print *, 'x_NR:', x_NR
       if (.not. interpolated) then
          exit_code = .true.
          fail_count_interpol(cutoff) = fail_count_interpol(cutoff) + 1
@@ -2110,9 +2135,9 @@ contains
       p(i_cut(cutoff)) = p_cut(cutoff)
       q(qi)            = q_ratios(x_NR(I_TWO), x_NR(I_ONE))
 
-      !!print *, 'in get_cutoff: '
-      !!print *, 'p: ', p(i_cut(cutoff))
-      !!print *, 'q: ', q(qi)
+      !print *, 'in get_cutoff: '
+      !print *, 'p: ', p(i_cut(cutoff))
+      !print *, 'q: ', q(qi)
 
       if (abs(q(qi)) > q_big) q(qi) = sign(one, q(qi)) * q_big
 #ifdef CRESP_VERBOSED

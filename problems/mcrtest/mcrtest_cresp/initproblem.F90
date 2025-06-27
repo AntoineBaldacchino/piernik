@@ -272,6 +272,7 @@ contains
                   do icr = 1, nspc
                      e_tot = amp_cr1 * cre_eff(nspc) * decr
                      if (e_tot > smallcree .and. use_cresp) then
+			cresp%n = 0.0 ;  cresp%e = 0.0
                         call cresp_get_scaled_init_spectrum(cresp%n, cresp%e, e_tot, icr)
 
                         cg%u(iarr_crspc2_n(icr,:),i,j,k) = cg%u(iarr_crspc2_n(icr,:),i,j,k) + cresp%n
@@ -305,9 +306,9 @@ contains
          call piernik_MPI_Allreduce(maxv, pMAX)
          if (master) then
 #ifdef CRESP
-            if (iarr_crs(icr) < flind%crspc%nbeg) then
+            if (iarr_crs(icr) < flind%crspcs(icr)%nbeg) then
                write(msg,*) '[initproblem:problem_initial_conditions] icr(nuc)  =',icr,' maxecr(nuc) =',maxv
-            else if (iarr_crs(icr) < flind%crspc%ebeg .and. iarr_crs(icr) >= flind%crspc%nbeg) then
+            else if (iarr_crs(icr) < flind%crspcs(icr)%ebeg .and. iarr_crs(icr) >= flind%crspcs(icr)%nbeg) then
                write(msg,*) '[initproblem:problem_initial_conditions] icr(cre_n)=',icr,' maxncr(cre) =',maxv
             else
                write(msg,*) '[initproblem:problem_initial_conditions] icr(cre_e)=',icr,' maxecr(cre) =',maxv

@@ -187,7 +187,7 @@ contains
       use func,            only: emag
       use initcosmicrays,  only: ncrb, ncr2b, ncrn, nspc, K_cr_paral, K_cr_perp, K_crs_paral, K_crs_perp, use_smallecr
       use mpisetup,        only: rbuff, ibuff, lbuff, cbuff, master, slave
-      use units,           only: clight, me, amu
+      use units,           only: clight, me, amu, mp
 
       implicit none
 
@@ -634,7 +634,7 @@ contains
               if (master) call warn(msg)
            endif
         endif
-        f_synchIC(j) =  (4. / 3. ) * cr_sigma_N(icr_spc(j)) / (cr_mass(icr_spc(j)) * amu * clight)
+        f_synchIC(j) =  (4. / 3. ) * cr_sigma_N(icr_spc(j)) / (cr_mass(icr_spc(j)) * mp * clight)
 
         write (msg, *) "[initcrspectrum:init_cresp] CR ", cr_names(icr_spc(j)), ": 4/3 * sigma_N / ( m * c ) = ", f_synchIC(j)
         if (master) call printinfo(msg)

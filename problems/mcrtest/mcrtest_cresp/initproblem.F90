@@ -306,9 +306,9 @@ contains
          call piernik_MPI_Allreduce(maxv, pMAX)
          if (master) then
 #ifdef CRESP
-            if (iarr_crs(icr) < flind%crspcs(icr)%nbeg) then
+            if (iarr_crs(icr) < flind%crspc%nbeg) then
                write(msg,*) '[initproblem:problem_initial_conditions] icr(nuc)  =',icr,' maxecr(nuc) =',maxv
-            else if (iarr_crs(icr) < flind%crspcs(icr)%ebeg .and. iarr_crs(icr) >= flind%crspcs(icr)%nbeg) then
+            else if (iarr_crs(icr) < flind%crspc%ebeg .and. iarr_crs(icr) >= flind%crspc%nbeg) then
                write(msg,*) '[initproblem:problem_initial_conditions] icr(cre_n)=',icr,' maxncr(cre) =',maxv
             else
                write(msg,*) '[initproblem:problem_initial_conditions] icr(cre_e)=',icr,' maxecr(cre) =',maxv

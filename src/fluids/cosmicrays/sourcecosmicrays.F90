@@ -184,9 +184,9 @@ contains
    subroutine cr_spallation_sources(u_cell,dt_doubled, q_spc_all)
 
       use constants,        only: one, zero
-      use initcrspectrum,   only: spec_mod_trms, p_fix, p_mid_fix, three_ps, g_fix
+      use initcrspectrum,   only: spec_mod_trms, p_fix, p_mid_fix, three_ps
       use initcosmicrays,   only: iarr_crspc2_e, iarr_crspc2_n, ncrb
-      use cr_data,          only: eCRSP, ncrsp_prim, ncrsp_sec, cr_table, cr_tau, cr_sigma, icr_Be10, icr_prim, icr_sec, cr_tau, cr_mass, cr_spectral, cr_names, transrelativistic, icr_spc
+      use cr_data,          only: eCRSP, ncrsp_prim, ncrsp_sec, cr_table, cr_tau, cr_sigma, icr_Be10, icr_prim, icr_sec, cr_tau, cr_mass, cr_spectral, transrelativistic, icr_spc
       use initcosmicrays,   only: nspc
       use fluidindex,       only: flind
       use fluids_pub,       only: has_ion, has_neu

@@ -182,16 +182,16 @@ contains
       use cresp_variables, only: clight_cresp
       use cr_data,         only: cr_mass, cr_sigma_N, cr_names, cr_Z, icr_spc, icr_H1, cr_spectral, cr_table, eCRSP, transrelativistic
       use dataio_pub,      only: printinfo, warn, msg, die, nh
-      use diagnostics,     only: my_allocate_with_index, my_allocate, my_deallocate, ma1d, ma2d
+      use diagnostics,     only: my_allocate_with_index, my_allocate, my_deallocate, ma1d
       use global,          only: disallow_CRnegatives
       use func,            only: emag
       use initcosmicrays,  only: ncrb, ncr2b, ncrn, nspc, K_cr_paral, K_cr_perp, K_crs_paral, K_crs_perp, use_smallecr
       use mpisetup,        only: rbuff, ibuff, lbuff, cbuff, master, slave
-      use units,           only: clight, me, amu, mp
+      use units,           only: clight, me, mp
 
       implicit none
 
-      integer(kind=4) :: i, j, k
+      integer(kind=4) :: i, j
       real, dimension(:), allocatable ::  p_br_def, q_br_def
 
       namelist /COSMIC_RAY_SPECTRUM/ cfl_cre, p_lo_init, p_up_init, f_init, q_init, q_big, initial_spectrum, p_bnd, p_min_fix, p_max_fix,  &

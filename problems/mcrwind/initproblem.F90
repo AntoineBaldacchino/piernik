@@ -160,7 +160,7 @@ contains
       use global,         only: smalld
       use grid_cont,      only: grid_container
       use hydrostatic,    only: hydrostatic_zeq_densmid, set_default_hsparams, dprof
-      use units,          only: kboltz, kB_cgs, TempHalo, mp
+      use units,          only: kboltz, TempHalo, mp
 #ifdef SHEAR
       use shear,          only: qshear, omega
 #endif /* SHEAR */

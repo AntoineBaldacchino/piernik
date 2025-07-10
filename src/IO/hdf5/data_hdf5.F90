@@ -407,8 +407,6 @@ contains
       use initcrspectrum,   only: dfpq
 #endif /* CRESP */
 #ifdef COSM_RAYS
-      use cr_data,          only: cr_names, cr_spectral, icr_spc
-      use initcosmicrays,   only: ncrn
       use cr_data,          only: cr_names, cr_spectral
       use dataio_pub,       only: die, warn, msg
       use named_array_list, only: wna, na_var_4d
@@ -497,11 +495,11 @@ contains
             if (var(clast - 2:clast - 2) == 'e') then
 
             !part of the code for spectrally resolved species : energy density
-            print *, 'ncrn: ', ncrn
+            !print *, 'ncrn: ', ncrn
 
                read (varn2,'(I2.2)') ibin
                do i = 1, size(cr_names)
-                  print *, 'i: ,', i
+                  !print *, 'i: ,', i
                   if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i! -ncrn
                enddo
                tab(:,:,:) = cg%u(flind%crspcs(icr)%ebeg+ibin-1, RNG)

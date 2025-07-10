@@ -159,7 +159,7 @@ contains
       use grid_cont,      only: grid_container
       use mpisetup,       only: master
 #ifdef COSM_RAYS
-      use cr_data,        only: eCRSP, cr_spectral, icr_H1, icr_C12, cr_index, eCRSP, rel_abound
+      use cr_data,        only: eCRSP, cr_spectral, icr_H1, icr_C12, cr_index, eCRSP
       use initcosmicrays, only: iarr_crn, iarr_crs, gamma_cr_1, K_cr_paral, K_cr_perp
 #ifdef CRESP
       use cresp_crspectrum, only: cresp_get_scaled_init_spectrum
@@ -272,7 +272,7 @@ contains
                   do icr = 1, nspc
                      e_tot = amp_cr1 * cre_eff(nspc) * decr
                      if (e_tot > smallcree .and. use_cresp) then
-			cresp%n = 0.0 ;  cresp%e = 0.0
+                        cresp%n = 0.0 ;  cresp%e = 0.0
                         call cresp_get_scaled_init_spectrum(cresp%n, cresp%e, e_tot, icr)
 
                         cg%u(iarr_crspc2_n(icr,:),i,j,k) = cg%u(iarr_crspc2_n(icr,:),i,j,k) + cresp%n

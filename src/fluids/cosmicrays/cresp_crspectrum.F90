@@ -998,7 +998,7 @@ contains
          print *, 'p_init: ', p_init
          p_cut = p_init(:,i_spc)
 
-	print *, 'p_fix: ', p_fix
+         print *, 'p_fix: ', p_fix
 
          p         = p_fix       ! actual array of p including free edges, p_fix shared via initcrspectrum
          p(max_ic) = p_cut
@@ -1069,7 +1069,7 @@ contains
          if (e_small_approx_init_cond > 0) then  ! Possible bug: len(p_bnd) == idlen == 3
              do co = LO, HI
                  if (p_bnd=='mov') then
-		   print *, 'in moving boundaries'
+                   print *, 'in moving boundaries'
                    call get_fqp_cutoff(co, i_spc, exit_code)
                    if (exit_code) then
                       write(msg,"(a,a,a,i3)") "[cresp_crspectrum:cresp_init_state] e_small_approx_init_cond = 1, but failed to solve initial spectrum cutoff '",bound_name(co),"' for CR component #", i_spc
@@ -1495,7 +1495,7 @@ contains
 
    function fq_to_e(p_l, p_r, f_l, g_l, q, bins, i_spc)
 
-      use constants,       only: zero, one, three
+      use constants,       only: zero, one
       use cresp_variables, only: fpcc
       use initcosmicrays,  only: ncrb
       use initcrspectrum,  only: eps, three_ps
@@ -1513,7 +1513,7 @@ contains
       !print *, 'p_l(bins) : ', p_l(bins)
       !!print *, 'three_p_s(bins) : ', three_ps(i_spc,bins)
       !!print *, 'q(bins)   : ', q(bins)
-      e_bins = fpcc * f_l(bins) * p_l(bins)**4
+      e_bins = fpcc * f_l(bins) * p_l(bins)**3 * g_l(bins)
       where (abs(q(bins) - three_ps(i_spc,bins)) > eps)
          e_bins = e_bins*((p_r(bins)/p_l(bins))**(three_ps(i_spc,bins) - q(bins)) - one)/(three_ps(i_spc,bins) - q(bins))
       elsewhere
@@ -1776,9 +1776,8 @@ contains
    subroutine cresp_compute_decay_loss(p, bins, i_spc) ! Computation of radioactive decay loss for number density
 
       use constants,      only: zero, one, three
-      use cr_data,        only: cr_mass
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: g_fix, s, three_ps, one_ps, eps, p_mid_fix
+      use initcrspectrum, only: g_fix, s, one_ps, eps
 
       implicit none
 
@@ -1881,7 +1880,7 @@ contains
 
    subroutine ne_to_q(n, e, q, bins, i_spc)
 
-      use cr_data,         only: cr_table, icr_E, transrelativistic
+      use cr_data,         only: transrelativistic
       use constants,       only: zero, one, I_ONE
       use dataio_pub,      only: warn
       use cresp_NR_method, only: compute_q, q_tab, alpha_q_tab, lin_interpolation_1D

@@ -410,6 +410,7 @@ contains
       use cr_data,          only: cr_names, cr_spectral
       use dataio_pub,       only: die, warn, msg
       use named_array_list, only: wna, na_var_4d
+      use initcosmicrays,   only: ncrn
 #endif /* COSM_RAYS */
 #ifndef ISO
       use units,            only: kboltz, mH
@@ -472,13 +473,13 @@ contains
             do i = 1, size(cr_names)
                if (var == trim('cr_' // cr_names(i))) exit
             enddo
-            tab(:,:,:) = cg%u(flind%crn%beg+i-1-count(cr_spectral), RNG)
+            tab(:,:,:) = cg%u(flind%crn%beg+i-1, RNG)
             select type(l => wna%lst(wna%fi))
                class is (na_var_4d)
                   clast = len(trim(var), kind=4)
                   varn2 = var(clast - 1:clast)
                   if (all(var(clast - 2:clast - 2) /= ['e', 'n'])) then
-                     if (trim(var) /= trim(l%compname(flind%crn%beg+i-1-count(cr_spectral)))) then
+                     if (trim(var) /= trim(l%compname(flind%crn%beg+i-1))) then
                         write(msg, '(5a,i3)') "cr_A-zz '", trim(var), "' /= '", trim(l%compname(flind%crn%beg+i-1)), "' ", i
                         call warn(msg)
                      endif
@@ -500,7 +501,7 @@ contains
                read (varn2,'(I2.2)') ibin
                do i = 1, size(cr_names)
                   !print *, 'i: ,', i
-                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i! -ncrn
+                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i -ncrn
                enddo
                tab(:,:,:) = cg%u(flind%crspcs(icr)%ebeg+ibin-1, RNG)
 
@@ -511,7 +512,7 @@ contains
                read (varn2,'(I2.2)') ibin
 
                do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i! -ncrn
+                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i -ncrn
                enddo
 
                !print *, 'flind%crspcs(icr)%nbeg+ibin-1: ', flind%crspcs(icr)%nbeg+ibin-1

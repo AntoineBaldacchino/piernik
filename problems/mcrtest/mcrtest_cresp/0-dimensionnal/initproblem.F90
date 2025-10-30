@@ -163,7 +163,7 @@ contains
       use grid_cont,      only: grid_container
       use mpisetup,       only: master
 #ifdef COSM_RAYS
-      use cr_data,        only: eCRSP, cr_spectral, icr_H1, icr_C12, cr_index, cr_table, eCRSP, rel_abound
+      use cr_data,        only: eCRSP, cr_spectral, icr_H1, icr_C12, cr_index, cr_table, eCRSP, rel_abound, icr_spc
       use initcosmicrays, only: iarr_crn, iarr_crs, gamma_cr_1, K_cr_paral, K_cr_perp
 #ifdef CRESP
       use cresp_crspectrum, only: cresp_get_scaled_init_spectrum
@@ -272,8 +272,12 @@ contains
                      if (e_tot > smallcree .and. use_cresp) then
                         call cresp_get_scaled_init_spectrum(cresp%n, cresp%e, e_tot, icr)
 
-                        cg%u(iarr_crspc2_n(icr,:),i,j,k) = cg%u(iarr_crspc2_n(icr,:),i,j,k) + rel_abound(icr)*cresp%n
-                        cg%u(iarr_crspc2_e(icr,:),i,j,k) = cg%u(iarr_crspc2_e(icr,:),i,j,k) + rel_abound(icr)*cresp%e
+                        print *, 'icr: ', icr
+                        print *, 'icr_spc(icr): ', icr_spc(icr)
+                        print *, 'rel_abound(icr_spc(icr)): ', rel_abound(icr_spc(icr))
+
+                        cg%u(iarr_crspc2_n(icr,:),i,j,k) = cg%u(iarr_crspc2_n(icr,:),i,j,k) + rel_abound(icr_spc(icr))*cresp%n
+                        cg%u(iarr_crspc2_e(icr,:),i,j,k) = cg%u(iarr_crspc2_e(icr,:),i,j,k) + rel_abound(icr_spc(icr))*cresp%e
 
                      endif
                   enddo

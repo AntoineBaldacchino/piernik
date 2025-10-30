@@ -90,6 +90,17 @@ contains
          case ("dend", "deni", "denn")
             f%fu = "\rm{g}/\rm{cm}^3"
             f%f2cgs = 1.0 / (gram/cm**3)
+         case ("xfdenn", "xfdend", "xfdeni","yfdenn", "yfdend", "yfdeni","zfdenn", "zfdend", "zfdeni")
+            f%fu = "\rm{g}/\rm{cm}^2/\rm{s}"
+            f%f2cgs = 1.0 / (gram/cm**2/sek)
+         case ("xfmomxn", "xfmomyn", "xfmomzn","xfmomxd", "xfmomyd", "xfmomzd","xfmomxi", "xfmomyi", "xfmomzi", &
+         &     "yfmomxn", "yfmomyn", "yfmomzn","yfmomxd", "yfmomyd", "yfmomzd","yfmomxi", "yfmomyi", "yfmomzi", &
+         &     "zfmomxn", "zfmomyn", "zfmomzn","zfmomxd", "zfmomyd", "zfmomzd","zfmomxi", "zfmomyi", "zfmomzi")
+            f%fu = "\rm{erg}/\rm{cm}^2/\rm{s}"
+            f%f2cgs = 1.0 / (erg/cm**2/sek)
+         case ("xfenen", "xfened", "xfenei","yfenen", "yfened", "yfenei","zfenen", "zfened", "zfenei")
+            f%fu = "\rm{erg}/\rm{cm}/\rm{s}^2"
+            f%f2cgs = 1.0 / (erg/cm/sek**2)
          case ("vlxd", "vlxn", "vlxi", "vlyd", "vlyn", "vlyi", "vlzd", "vlzn", "vlzi", "v", "c_s", "cs")
             f%fu = "\rm{cm}/\rm{s}"
             f%f2cgs = 1.0 / (cm/sek)
@@ -116,6 +127,7 @@ contains
             f%fu= ""
          case ("magdir")
             f%fu = "\rm{radians}"
+         case ("xflux")
 #ifdef COSM_RAYS
          ! ToDo: Adopt for wider range
          case ("cr01" : "cr99")
@@ -125,10 +137,8 @@ contains
 #ifdef CRESP
          ! ToDo: Adopt for wider range
          case ("cr_e-n01" : "cr_e-n99")
-             f%fu = "\rm{erg}/\rm{cm}^3" ! rest mass energy times number density
-             f%f2cgs = 1.0 / (erg/cm**3)
-             !f%fu = "1/\rm{cm}^3"
-             !f%f2cgs = 1.0 / (1.0/cm**3) ! number density
+            f%fu = "1/\rm{cm}^3"
+            f%f2cgs = 1.0 / (1.0/cm**3) ! number density
          case ("cr_e-e01" : "cr_e-e99")
              f%fu = "\rm{erg}/\rm{cm}^3"
              f%f2cgs = 1.0 / (erg/cm**3)
@@ -298,6 +308,14 @@ contains
             case ("tdyn")
                newname="dynamical_time"
 #endif /* NBODY */
+            case ("xfdeni", "xfdenn", "xfdend", "yfdeni", "yfdenn", "yfdend", "zfdeni", "zfdenn", "zfdend")
+               write  (newname, '(A1,"_directed_density_flux")') var(1:1)
+         case ("xfmomxn", "xfmomyn", "xfmomzn","xfmomxd", "xfmomyd", "xfmomzd","xfmomxi", "xfmomyi", "xfmomzi", &
+         &     "yfmomxn", "yfmomyn", "yfmomzn","yfmomxd", "yfmomyd", "yfmomzd","yfmomxi", "yfmomyi", "yfmomzi", &
+         &     "zfmomxn", "zfmomyn", "zfmomzn","zfmomxd", "zfmomyd", "zfmomzd","zfmomxi", "zfmomyi", "zfmomzi")
+               write  (newname, '(A1,"_directed_momentum_",A1,"_flux")') var(1:1),var(6:6)
+            case ("xfenei", "xfenen", "xfened", "yfenei", "yfenen", "yfened", "zfenei", "zfenen", "zfened")
+               write  (newname, '(A1,"_directed_energy_flux")') var(1:1)
             case default
                write(newname, '(A)') trim(var)
          end select
@@ -390,7 +408,7 @@ contains
    subroutine datafields_hdf5(var, tab, ierrh, cg)
 
       use common_hdf5,      only: common_shortcuts
-      use constants,        only: dsetnamelen, I_ONE, I_TWO
+      use constants,        only: dsetnamelen, I_ONE, I_TWO, zero
       use fluids_pub,       only: has_ion, has_neu, has_dst
       use fluidindex,       only: flind
       use fluidtypes,       only: component_fluid
@@ -441,7 +459,6 @@ contains
       if (.not. associated(fl_dni)) tab = -huge(1.)
       ierrh = 0
       tab = 0.0
-      icr = 0
 #ifdef CRESP
       ibin = 0
 #endif /* CRESP */
@@ -457,7 +474,7 @@ contains
 #endif /* !MAGNETIC */
       select case (var)
 #ifdef COSM_RAYS
-         case ("cr01" : "cr99")
+         case ("cr01" : "cr99") !This should be deleted, I guess??!!
             read(var,'(A2,I2.2)') aux, i !> \deprecated BEWARE 0 <= i <= 99, no other indices can be dumped to hdf file
             tab(:,:,:) = cg%u(flind%crn%beg+i-1, RNG)
             select type(l => wna%lst(wna%fi))
@@ -470,6 +487,7 @@ contains
                   call die("[datafields_hdf5] 'cr01-99' not a na_var_4d")
             end select
          case ('cr_A000' : 'cr_zz99')
+            print *, 'var (before loop): ', var
             do i = 1, size(cr_names)
                if (var == trim('cr_' // cr_names(i))) exit
             enddo
@@ -493,39 +511,54 @@ contains
             varn2 = var(clast - 1:clast)
             !print *, 'cr_names: ', cr_names
             !print *, 'cr_spectral: ', cr_spectral
+            icr = 0
+            do i = 1, size(cr_names)
+               !print *, 'i:', i
+               if (cr_spectral(i)) then
+                  if (trim(cr_names(i)) /= trim(var(4:clast-3))) then
+                        icr = icr + 1
+                  else if (trim(cr_names(i)) == trim(var(4:clast-3))) then
+                        icr = icr + 1  ! count this one too, if it’s spectral
+                        exit
+                  end if
+               end if
+            end do
+            !print *, 'var: ', var
+            !print *, 'icr: ', icr
             if (var(clast - 2:clast - 2) == 'e') then
 
             !part of the code for spectrally resolved species : energy density
             !print *, 'ncrn: ', ncrn
 
                read (varn2,'(I2.2)') ibin
-               do i = 1, size(cr_names)
-                  !print *, 'i: ,', i
-                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i -ncrn
-               enddo
                tab(:,:,:) = cg%u(flind%crspcs(icr)%ebeg+ibin-1, RNG)
+               select type(l => wna%lst(wna%fi))
+                  class is (na_var_4d)
+                     if (trim(var) /= trim(l%compname(flind%crspcs(icr)%ebeg+ibin-1))) then
+                        write(msg, '(5a,i3)') "cr_e '", trim(var), "' /= '", trim(l%compname(flind%crspcs(icr)%ebeg+ibin-1)), "' ", ibin
+                        call warn(msg)
+                     endif
+                  class default
+                     call die("[datafields_hdf5] 'cr_e' not a na_var_4d")
+               end select
 
             else if (var(clast - 2:clast - 2) == 'n') then
 
             !part of the code for spectrally resolved species : number density
 
                read (varn2,'(I2.2)') ibin
-
-               do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3) .and. cr_spectral(i)) icr = i -ncrn
-               enddo
-
-               !print *, 'flind%crspcs(icr)%nbeg+ibin-1: ', flind%crspcs(icr)%nbeg+ibin-1
                tab(:,:,:) = cg%u(flind%crspcs(icr)%nbeg+ibin-1, RNG)
-
-            !else
-            !   do i = 1, size(cr_names)
-            !      if (var == trim('cr_' // cr_names(i))) exit
-            !   enddo
-            !   tab(:,:,:) = cg%u(flind%crn%beg+ibin-1-count(cr_spectral), RNG)
+               select type(l => wna%lst(wna%fi))
+                  class is (na_var_4d)
+                     if (trim(var) /= trim(l%compname(flind%crspcs(icr)%nbeg+ibin-1))) then
+                        write(msg, '(5a,i3)') "cr_n '", trim(var), "' /= '", trim(l%compname(flind%crspcs(icr)%nbeg+ibin-1)), "' ", ibin
+                        call warn(msg)
+                     endif
+                  class default
+                     call die("[datafields_hdf5] 'cr_n' not a na_var_4d")
+               end select
             endif
-  !        print *, var, aux
-  !        print *, flind%crn%beg+i-1-count(cr_spectral)
+
          !case ("cren01" : "cren99")
          !   read(var,'(A4,I2.2)') aux, i !> \deprecated BEWARE 0 <= i <= 99, no other indices can be dumped to hdf file
          !   tab(:,:,:) = cg%u(flind%crspc%nbeg+i-1, RNG)

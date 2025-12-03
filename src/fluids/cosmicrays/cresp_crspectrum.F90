@@ -2255,7 +2255,7 @@ contains
 
       loss_amplitude = Lambda_Cc*cr_Z(icr_spc(i_spc))**2*(cr_mass(icr_spc(i_spc))/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
 
-      delta_t_sub = 0.1*abs(p_0(0)**(1-h)/loss_amplitude) !CFL for Coulomb = 0.5 * |p_min/(dp/dt)(p_min)|
+      delta_t_sub = 0.1*abs(p_0(0)**(1-h)/loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
 
       n_sub = max(1,int(delta_t/delta_t_sub))
 
@@ -2277,14 +2277,14 @@ contains
       p_one = eps_tiny
       f_one = f_old
 
-      do i_sub = 1, n_sub
+      do i_sub = 1, n_sub !subcycling loop
 
          print *, 'i_sub: ', i_sub
 
 
          f_old(last_bin) = zero
 
-         do i_bin = 0, last_bin
+         do i_bin = 0, last_bin ! loop to compute f_one and p_one
             if (p_0(i_bin)**(1-h) .gt. delta_p) then
                p_one(i_bin) = max(((p_0(i_bin))**(1-h) - delta_p)**(1/(1-h)), eps_tiny)
                ! avoid division by zero for extremely small p_one
@@ -2311,60 +2311,62 @@ contains
 
          ! --- Interpolate/extrapolate f_0 from f_one at the new p-grid p_0
          do i_bin = 0, last_bin
+            if (p_0(i_bin) .lt. 1e3) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^3 GeV (negligible losses, creates artifacts)
+            print *, 'p_0(',i_bin,'): ', p_0(i_bin)
             ! default fallback
-            f_0(i_bin) = delta
+               f_0(i_bin) = delta
 
-            ! If p_0 is smaller or equal than smallest p_one, use nearest (or fallback) value
-            if (p_0(i_bin) <= max(p_one(0), eps_tiny)) then
-               if (f_one(0) .gt. delta) then
-                  f_0(i_bin) = f_one(0)
-               else
-                  f_0(i_bin) = delta
-               endif
-               cycle
-            end if
-
-            ! If p_0 is larger or equal than largest p_one, use nearest-extrapolation:
-            if (p_0(i_bin) >= max(p_one(last_bin), eps_tiny)) then
-               ! find last two distinct valid points for extrapolation
-               k = last_bin
-               do while (k .gt. 0 .and. p_one(k) <= p_one(k-1) + eps_local)
-                  k = k - 1
-               enddo
-               if (k .ge. 1 .and. f_one(k) .gt. delta .and. f_one(k-1) .gt. delta) then
-                  ! log-linear extrapolate using last segment
-                  w = log(p_0(i_bin)/p_one(k-1)) / log(p_one(k)/p_one(k-1))
-                  f_0(i_bin) = exp((1.0 - w)*log(f_one(k-1)) + w*log(f_one(k)))
-               else
-                  ! fall back to last known value
-                  if (f_one(last_bin) .gt. delta) then
-                     f_0(i_bin) = f_one(last_bin)
+               ! If p_0 is smaller or equal than smallest p_one, use nearest (or fallback) value
+               if (p_0(i_bin) <= max(p_one(0), eps_tiny)) then
+                  if (f_one(0) .gt. delta) then
+                     f_0(i_bin) = f_one(0)
                   else
                      f_0(i_bin) = delta
                   endif
-               endif
-               cycle
-            end if
+                  cycle
+               end if
 
-            ! Normal interior interpolation: find j such that p_one(j) < p_0(i) < p_one(j+1)
-            do j = 0, last_bin-1
-               if (p_0(i_bin) .gt. p_one(j) .and. p_0(i_bin) .le. p_one(j+1)) then
-                  ! ensure denominators are safe
-                  if (p_one(j+1) .gt. p_one(j) + eps_local .and. f_one(j) .gt. delta .and. f_one(j+1) .gt. delta) then
-                     w = log(p_0(i_bin)/p_one(j)) / log(p_one(j+1)/p_one(j))
-                     f_0(i_bin) = exp((1.0 - w)*log(f_one(j)) + w*log(f_one(j+1)))
+               ! If p_0 is larger or equal than largest p_one, use nearest-extrapolation:
+               if (p_0(i_bin) >= max(p_one(last_bin), eps_tiny)) then
+                  ! find last two distinct valid points for extrapolation
+                  k = last_bin
+                  do while (k .gt. 0 .and. p_one(k) <= p_one(k-1) + eps_local)
+                     k = k - 1
+                  enddo
+                  if (k .ge. 1 .and. f_one(k) .gt. delta .and. f_one(k-1) .gt. delta) then
+                     ! log-linear extrapolate using last segment
+                     w = log(p_0(i_bin)/p_one(k-1)) / log(p_one(k)/p_one(k-1))
+                     f_0(i_bin) = exp((1.0 - w)*log(f_one(k-1)) + w*log(f_one(k)))
                   else
-                     ! cannot interpolate reliably -> fallback
-                     if (f_one(j) .gt. delta) then
-                        f_0(i_bin) = f_one(j)
+                     ! fall back to last known value
+                     if (f_one(last_bin) .gt. delta) then
+                        f_0(i_bin) = f_one(last_bin)
                      else
                         f_0(i_bin) = delta
                      endif
                   endif
-                  exit
-               endif
-            enddo
+                  cycle
+               end if
 
+               ! Normal interior interpolation: find j such that p_one(j) < p_0(i) < p_one(j+1)
+               do j = 0, last_bin-1
+                  if (p_0(i_bin) .gt. p_one(j) .and. p_0(i_bin) .le. p_one(j+1)) then
+                     ! ensure denominators are safe
+                     if (p_one(j+1) .gt. p_one(j) + eps_local .and. f_one(j) .gt. delta .and. f_one(j+1) .gt. delta) then
+                        w = log(p_0(i_bin)/p_one(j)) / log(p_one(j+1)/p_one(j))
+                        f_0(i_bin) = exp((1.0 - w)*log(f_one(j)) + w*log(f_one(j+1)))
+                     else
+                        ! cannot interpolate reliably -> fallback
+                        if (f_one(j) .gt. delta) then
+                           f_0(i_bin) = f_one(j)
+                        else
+                           f_0(i_bin) = delta
+                        endif
+                     endif
+                     exit
+                  endif
+               enddo
+            endif
          enddo
          f_old = f_0
          f_0(last_bin) = zero
@@ -2411,7 +2413,7 @@ contains
 
          ! --- Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
       do i_bin = 1, last_bin
-         if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta) then
+         if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. 1e3) then !For p_0(i_bin), same condtion at high-energy for q
             q_0(i_bin) = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
          !else
          !

@@ -2259,9 +2259,6 @@ contains
 
       n_sub = max(1,int(delta_t/delta_t_sub))
 
-      print *, 'delta_t_sub: ', delta_t_sub
-      print *, 'n_sub: ', n_sub
-
       if (n_sub .gt. n_step_max) then
 
          n_sub = n_step_max
@@ -2278,9 +2275,6 @@ contains
       f_one = f_old
 
       do i_sub = 1, n_sub !subcycling loop
-
-         print *, 'i_sub: ', i_sub
-
 
          f_old(last_bin) = zero
 
@@ -2312,7 +2306,6 @@ contains
          ! --- Interpolate/extrapolate f_0 from f_one at the new p-grid p_0
          do i_bin = 0, last_bin
             if (p_0(i_bin) .lt. 1e3) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^3 GeV (negligible losses, creates artifacts)
-            print *, 'p_0(',i_bin,'): ', p_0(i_bin)
             ! default fallback
                f_0(i_bin) = delta
 

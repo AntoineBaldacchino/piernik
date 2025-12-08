@@ -2305,7 +2305,7 @@ contains
 
          ! --- Interpolate/extrapolate f_0 from f_one at the new p-grid p_0
          do i_bin = 0, last_bin
-            if (p_0(i_bin) .lt. 1e3) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^3 GeV (negligible losses, creates artifacts)
+            if (p_0(i_bin) .lt. 1e2) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
             ! default fallback
                f_0(i_bin) = delta
 
@@ -2374,16 +2374,16 @@ contains
          ! Number of particles leaving the CR regime during this substep
          dN1_out = Fp1_out * delta_t_sub / dp1
 
-         if (dN1_out >= f_0(1) * (1.0d0 - eps_f)) then
-            ! Tout le contenu du bin 1 est vidé
-            dN1_out = f_0(1)
-            f_0(1) = delta
-            f_0(0) = f_0(0) + dN1_out
-         else
-            ! Transfert normal
-            f_0(1) = f_0(1) - dN1_out
-            f_0(0) = f_0(0) + dN1_out
-         endif
+         !if (dN1_out >= f_0(1) * (1.0d0 - eps_f)) then
+         !   ! Tout le contenu du bin 1 est vidé
+         !   dN1_out = f_0(1)
+         !   f_0(1) = delta
+         !   f_0(0) = f_0(0) + dN1_out
+         !else
+         !   ! Transfert normal
+         !   f_0(1) = f_0(1) - dN1_out
+         !   f_0(0) = f_0(0) + dN1_out
+         !endif
 
          Fp0_out = abs(loss_amplitude * p_0(0)**h * f_0(0))
 
@@ -2406,7 +2406,7 @@ contains
 
          ! --- Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
       do i_bin = 1, last_bin
-         if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. 1e3) then !For p_0(i_bin), same condtion at high-energy for q
+         if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. 1e2) then !For p_0(i_bin), same condtion at high-energy for q
             q_0(i_bin) = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
          !else
          !

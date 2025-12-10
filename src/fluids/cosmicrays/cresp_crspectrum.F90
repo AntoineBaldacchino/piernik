@@ -2418,7 +2418,7 @@ contains
 
          ! --- Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
       do i_bin = 1, last_bin
-         if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. 1e2) then !For p_0(i_bin), same condtion at high-energy for q
+         if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. p_cut) then !For p_0(i_bin), same condtion at high-energy for q
             q_0(i_bin) = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
          !else
          !

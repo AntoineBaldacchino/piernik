@@ -2231,12 +2231,12 @@ contains
       real, dimension(0:ncrb),intent(in)        :: p_0
       real, dimension(0:ncrb)                   :: f_0
       real, dimension(ncrb)                     :: q_0
-      real                                      :: eps_tiny, eps_local, eps_f
+      real                                      :: eps_tiny, eps_local, eps_f, p_cut
       real(kind=8)                              :: delta, delta_t_sub, loss_amplitude, dp0, dp1, Fp0_out, dN0_out, Fp1_out, dN1_out, N_lost, tau_sink
 
       last_bin = bins(size(bins))
 
-      n_step_max = 5000
+      n_step_max = 10
 
       dgas = 0.
 
@@ -2250,10 +2250,14 @@ contains
 
       h = - 1.9 !value of the power law coefficient for momentum-dependent Coulomb cooling approximation
 
+      p_cut = 1e2 ! Momentum value under which cooling applies. Above, the spectrum is unchanged.
+
       if (has_ion) dgas = dgas + u_cell(flind%ion%idn) / mp
       if (has_neu) dgas = dgas + u_cell(flind%neu%idn) / mH
 
       loss_amplitude = Lambda_Cc*cr_Z(icr_spc(i_spc))**2*(cr_mass(icr_spc(i_spc))/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
+
+      ! compute substep and delta_p once
 
       delta_t_sub = 0.1*abs(p_0(0)**(1-h)/loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
 
@@ -2268,10 +2272,14 @@ contains
 
       delta_p = (1-h)*delta_t_sub*loss_amplitude
 
+      ! initialize arrays
+
       f_old = f_0
       f_0(last_bin) = zero
       f_old(last_bin) = zero
-      p_one = eps_tiny
+
+      ! set p_one initially to the grid momenta so frozen bins are correct by default
+      p_one = p_0
       f_one = f_old
 
       do i_sub = 1, n_sub !subcycling loop
@@ -2279,130 +2287,134 @@ contains
          f_old(last_bin) = zero
 
          do i_bin = 0, last_bin ! loop to compute f_one and p_one
-            if (p_0(i_bin)**(1-h) .gt. delta_p) then
-               p_one(i_bin) = max(((p_0(i_bin))**(1-h) - delta_p)**(1/(1-h)), eps_tiny)
-               ! avoid division by zero for extremely small p_one
-               if (p_one(i_bin) .gt. eps_tiny) then
-                  f_one(i_bin) = f_old(i_bin)*(p_0(i_bin)/p_one(i_bin))**(2+h)
+            if (p_0(i_bin) .lt. p_cut) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+               if (p_0(i_bin)**(1-h) .gt. delta_p) then
+                  p_one(i_bin) = max(((p_0(i_bin))**(1-h) - delta_p)**(1/(1-h)), eps_tiny)
+                  ! avoid division by zero for extremely small p_one
+                  if (p_one(i_bin) .gt. eps_tiny) then
+                     f_one(i_bin) = f_old(i_bin)*(p_0(i_bin)/p_one(i_bin))**(2+h)
+                  else
+                     f_one(i_bin) = delta
+                  endif
                else
+                  ! cooled to (near) zero momentum -> treat as removed (or sink)
+                  p_one(i_bin) = zero
                   f_one(i_bin) = delta
                endif
-            else
-               ! cooled to (near) zero momentum -> treat as removed (or sink)
-               p_one(i_bin) = zero
-               f_one(i_bin) = delta
             endif
          enddo
+         ! accumulate the result of this substep before the next substep
+         f_old = f_one
+      enddo
 
-         ! Ensure p_one is non-decreasing; if a later p_one is zero while earlier not, keep consistency
-         ! (This is a conservative fix: if cooling removes later bins, keep monotonicity)
-         do i_bin = 1, last_bin
-            if (p_one(i_bin) .lt. p_one(i_bin-1)) then
-               p_one(i_bin) = p_one(i_bin-1)
-               f_one(i_bin) = f_one(i_bin-1)
-            endif
-         enddo
+      ! Ensure p_one is non-decreasing; if a later p_one is zero while earlier not, keep consistency
+      ! (This is a conservative fix: if cooling removes later bins, keep monotonicity)
+      do i_bin = 1, last_bin
+         if (p_one(i_bin) .lt. p_one(i_bin-1)) then
+            p_one(i_bin) = p_one(i_bin-1)
+            f_one(i_bin) = f_one(i_bin-1)
+         endif
+      enddo
 
-         ! --- Interpolate/extrapolate f_0 from f_one at the new p-grid p_0
-         do i_bin = 0, last_bin
-            if (p_0(i_bin) .lt. 1e2) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
-            ! default fallback
-               f_0(i_bin) = delta
+      ! --- Interpolate/extrapolate f_0 from f_one at the new p-grid p_0
+      do i_bin = 0, last_bin
+         if (p_0(i_bin) .lt. p_cut) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+         ! default fallback
+            f_0(i_bin) = delta
 
-               ! If p_0 is smaller or equal than smallest p_one, use nearest (or fallback) value
-               if (p_0(i_bin) <= max(p_one(0), eps_tiny)) then
-                  if (f_one(0) .gt. delta) then
-                     f_0(i_bin) = f_one(0)
+            ! If p_0 is smaller or equal than smallest p_one, use nearest (or fallback) value
+            if (p_0(i_bin) <= max(p_one(0), eps_tiny)) then
+               if (f_one(0) .gt. delta) then
+                  f_0(i_bin) = f_one(0)
+               else
+                  f_0(i_bin) = delta
+               endif
+               cycle
+            end if
+
+            ! If p_0 is larger or equal than largest p_one, use nearest-extrapolation:
+            if (p_0(i_bin) >= max(p_one(last_bin), eps_tiny)) then
+               ! find last two distinct valid points for extrapolation
+               k = last_bin
+               do while (k .gt. 0 .and. p_one(k) <= p_one(k-1) + eps_local)
+                  k = k - 1
+               enddo
+               if (k .ge. 1 .and. f_one(k) .gt. delta .and. f_one(k-1) .gt. delta) then
+                  ! log-linear extrapolate using last segment
+                  w = log(p_0(i_bin)/p_one(k-1)) / log(p_one(k)/p_one(k-1))
+                  f_0(i_bin) = exp((1.0 - w)*log(f_one(k-1)) + w*log(f_one(k)))
+               else
+                  ! fall back to last known value
+                  if (f_one(last_bin) .gt. delta) then
+                     f_0(i_bin) = f_one(last_bin)
                   else
                      f_0(i_bin) = delta
                   endif
-                  cycle
-               end if
+               endif
+               cycle
+            end if
 
-               ! If p_0 is larger or equal than largest p_one, use nearest-extrapolation:
-               if (p_0(i_bin) >= max(p_one(last_bin), eps_tiny)) then
-                  ! find last two distinct valid points for extrapolation
-                  k = last_bin
-                  do while (k .gt. 0 .and. p_one(k) <= p_one(k-1) + eps_local)
-                     k = k - 1
-                  enddo
-                  if (k .ge. 1 .and. f_one(k) .gt. delta .and. f_one(k-1) .gt. delta) then
-                     ! log-linear extrapolate using last segment
-                     w = log(p_0(i_bin)/p_one(k-1)) / log(p_one(k)/p_one(k-1))
-                     f_0(i_bin) = exp((1.0 - w)*log(f_one(k-1)) + w*log(f_one(k)))
+            ! Normal interior interpolation: find j such that p_one(j) < p_0(i) < p_one(j+1)
+            do j = 0, last_bin-1
+               if (p_0(i_bin) .gt. p_one(j) .and. p_0(i_bin) .le. p_one(j+1)) then
+                  ! ensure denominators are safe
+                  if (p_one(j+1) .gt. p_one(j) + eps_local .and. f_one(j) .gt. delta .and. f_one(j+1) .gt. delta) then
+                     w = log(p_0(i_bin)/p_one(j)) / log(p_one(j+1)/p_one(j))
+                     f_0(i_bin) = exp((1.0 - w)*log(f_one(j)) + w*log(f_one(j+1)))
                   else
-                     ! fall back to last known value
-                     if (f_one(last_bin) .gt. delta) then
-                        f_0(i_bin) = f_one(last_bin)
+                     ! cannot interpolate reliably -> fallback
+                     if (f_one(j) .gt. delta) then
+                        f_0(i_bin) = f_one(j)
                      else
                         f_0(i_bin) = delta
                      endif
                   endif
-                  cycle
-               end if
-
-               ! Normal interior interpolation: find j such that p_one(j) < p_0(i) < p_one(j+1)
-               do j = 0, last_bin-1
-                  if (p_0(i_bin) .gt. p_one(j) .and. p_0(i_bin) .le. p_one(j+1)) then
-                     ! ensure denominators are safe
-                     if (p_one(j+1) .gt. p_one(j) + eps_local .and. f_one(j) .gt. delta .and. f_one(j+1) .gt. delta) then
-                        w = log(p_0(i_bin)/p_one(j)) / log(p_one(j+1)/p_one(j))
-                        f_0(i_bin) = exp((1.0 - w)*log(f_one(j)) + w*log(f_one(j+1)))
-                     else
-                        ! cannot interpolate reliably -> fallback
-                        if (f_one(j) .gt. delta) then
-                           f_0(i_bin) = f_one(j)
-                        else
-                           f_0(i_bin) = delta
-                        endif
-                     endif
-                     exit
-                  endif
-               enddo
-            endif
-         enddo
-         f_old = f_0
-         f_0(last_bin) = zero
-         f_old(last_bin) = zero
-
-         dp0 = max(p_0(1) - p_0(0), 1d-40)
-         dp1 = max(p_0(2) - p_0(1), 1d-40)
-
-         ! Compute outgoing flux at lower boundary
-         Fp1_out = abs(loss_amplitude * p_0(1)**h * f_0(1))
-
-         ! Number of particles leaving the CR regime during this substep
-         dN1_out = Fp1_out * delta_t_sub / dp1
-
-         !if (dN1_out >= f_0(1) * (1.0d0 - eps_f)) then
-         !   ! Tout le contenu du bin 1 est vidé
-         !   dN1_out = f_0(1)
-         !   f_0(1) = delta
-         !   f_0(0) = f_0(0) + dN1_out
-         !else
-         !   ! Transfert normal
-         !   f_0(1) = f_0(1) - dN1_out
-         !   f_0(0) = f_0(0) + dN1_out
-         !endif
-
-         Fp0_out = abs(loss_amplitude * p_0(0)**h * f_0(0))
-
-         dN0_out = Fp0_out * delta_t_sub / dp0
-
-         if (dN0_out >= f_0(0) * (1.0d0 - eps_f)) then
-            dN0_out = f_0(0)
-            f_0(0) = delta
-         else
-            f_0(0) = f_0(0) - dN0_out
+                  exit
+               endif
+            enddo
          endif
-
-         ! Accumulate diagnostic (for conservation test)
-         N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1
-
       enddo
 
 
 
+      f_old = f_0
+      f_0(last_bin) = zero
+      f_old(last_bin) = zero
+
+
+      dp0 = max(p_0(1) - p_0(0), 1d-40)
+      dp1 = max(p_0(2) - p_0(1), 1d-40)
+
+      ! Compute outgoing flux at lower boundary
+      Fp1_out = abs(loss_amplitude * p_0(1)**h * f_0(1))
+
+      ! Number of particles leaving the CR regime during this substep
+      dN1_out = Fp1_out * delta_t_sub / dp1
+
+      !if (dN1_out >= f_0(1) * (1.0d0 - eps_f)) then
+      !   ! Tout le contenu du bin 1 est vidé
+      !   dN1_out = f_0(1)
+      !   f_0(1) = delta
+      !   f_0(0) = f_0(0) + dN1_out
+      !else
+      !   ! Transfert normal
+      !   f_0(1) = f_0(1) - dN1_out
+      !   f_0(0) = f_0(0) + dN1_out
+      !endif
+
+      Fp0_out = abs(loss_amplitude * p_0(0)**h * f_0(0))
+
+      dN0_out = Fp0_out * delta_t_sub / dp0
+
+      if (dN0_out >= f_0(0) * (1.0d0 - eps_f)) then
+         dN0_out = f_0(0)
+         f_0(0) = delta
+      else
+         f_0(0) = f_0(0) - dN0_out
+      endif
+
+      ! Accumulate diagnostic (for conservation test)
+      N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1
 
          ! --- Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
       do i_bin = 1, last_bin

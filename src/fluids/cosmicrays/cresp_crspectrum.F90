@@ -2250,7 +2250,7 @@ contains
 
       h = - 1.9 !value of the power law coefficient for momentum-dependent Coulomb cooling approximation
 
-      p_cut = 1e2 ! Momentum value under which cooling applies. Above, the spectrum is unchanged.
+      p_cut = 1.0e2 !p_0(10) ! Momentum value under which cooling applies. Above, the spectrum is unchanged.
 
       if (has_ion) dgas = dgas + u_cell(flind%ion%idn) / mp
       if (has_neu) dgas = dgas + u_cell(flind%neu%idn) / mH
@@ -2259,18 +2259,19 @@ contains
 
       ! compute substep and delta_p once
 
-      delta_t_sub = 0.1*abs(p_0(0)**(1-h)/loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
-
-      n_sub = max(1,int(delta_t/delta_t_sub))
-
-      if (n_sub .gt. n_step_max) then
-
-         n_sub = n_step_max
-         delta_t_sub = delta_t/n_sub
-
-      endif
-
-      delta_p = (1-h)*delta_t_sub*loss_amplitude
+      !delta_t_sub = 0.1*abs(p_0(0)**(1-h)/loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
+      !
+      !n_sub = max(1,int(delta_t/delta_t_sub))
+      !
+      !if (n_sub .gt. n_step_max) then
+      !
+      !   n_sub = n_step_max
+      !   delta_t_sub = delta_t/n_sub
+      !
+      !endif
+      !
+      !delta_p = (1-h)*delta_t_sub*loss_amplitude
+      !print *, 'n_sub (before any loop: ', n_sub
 
       ! initialize arrays
 
@@ -2282,29 +2283,43 @@ contains
       p_one = p_0
       f_one = f_old
 
-      do i_sub = 1, n_sub !subcycling loop
+      f_old(last_bin) = zero
 
-         f_old(last_bin) = zero
+      do i_bin = 0, last_bin ! loop to compute f_one and p_one
 
-         do i_bin = 0, last_bin ! loop to compute f_one and p_one
-            if (p_0(i_bin) .lt. p_cut) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+         if (p_0(i_bin) .lt. p_cut) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+
+            delta_t_sub = 0.1*abs(p_0(i_bin)**(1-h)/loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
+
+            n_sub = max(1,int(delta_t/delta_t_sub))
+
+            if (n_sub .gt. n_step_max) then
+
+               n_sub = n_step_max
+               delta_t_sub = delta_t/n_sub
+
+            endif
+
+            if (delta_t_sub .gt. delta_t) delta_t_sub = delta_t
+            delta_p = (1-h)*delta_t_sub*loss_amplitude
+
+            do i_sub = 1, n_sub !subcycling loop
+
                if (p_0(i_bin)**(1-h) .gt. delta_p) then
                   p_one(i_bin) = max(((p_0(i_bin))**(1-h) - delta_p)**(1/(1-h)), eps_tiny)
                   ! avoid division by zero for extremely small p_one
-                  if (p_one(i_bin) .gt. eps_tiny) then
-                     f_one(i_bin) = f_old(i_bin)*(p_0(i_bin)/p_one(i_bin))**(2+h)
-                  else
-                     f_one(i_bin) = delta
-                  endif
+                  f_one(i_bin) = f_old(i_bin)*(p_0(i_bin)/p_one(i_bin))**(2+h)
                else
                   ! cooled to (near) zero momentum -> treat as removed (or sink)
                   p_one(i_bin) = zero
                   f_one(i_bin) = delta
                endif
-            endif
-         enddo
-         ! accumulate the result of this substep before the next substep
-         f_old = f_one
+
+               ! accumulate the result of this substep before the next substep
+               f_old(i_bin) = f_one(i_bin)
+            enddo
+
+         endif
       enddo
 
       ! Ensure p_one is non-decreasing; if a later p_one is zero while earlier not, keep consistency
@@ -2402,16 +2417,16 @@ contains
       !   f_0(0) = f_0(0) + dN1_out
       !endif
 
-      Fp0_out = abs(loss_amplitude * p_0(0)**h * f_0(0))
-
-      dN0_out = Fp0_out * delta_t_sub / dp0
-
-      if (dN0_out >= f_0(0) * (1.0d0 - eps_f)) then
-         dN0_out = f_0(0)
-         f_0(0) = delta
-      else
-         f_0(0) = f_0(0) - dN0_out
-      endif
+      !Fp0_out = abs(loss_amplitude * p_0(0)**h * f_0(0))
+      !
+      !dN0_out = Fp0_out * delta_t_sub / dp0
+      !
+      !if (dN0_out >= f_0(0) * (1.0d0 - eps_f)) then
+      !   dN0_out = f_0(0)
+      !   f_0(0) = delta
+      !else
+      !   f_0(0) = f_0(0) - dN0_out
+      !endif
 
       ! Accumulate diagnostic (for conservation test)
       N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1

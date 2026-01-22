@@ -90,6 +90,17 @@ contains
          case ("dend", "deni", "denn")
             f%fu = "\rm{g}/\rm{cm}^3"
             f%f2cgs = 1.0 / (gram/cm**3)
+         case ("xfdenn", "xfdend", "xfdeni","yfdenn", "yfdend", "yfdeni","zfdenn", "zfdend", "zfdeni")
+            f%fu = "\rm{g}/\rm{cm}^2/\rm{s}"
+            f%f2cgs = 1.0 / (gram/cm**2/sek)
+         case ("xfmomxn", "xfmomyn", "xfmomzn","xfmomxd", "xfmomyd", "xfmomzd","xfmomxi", "xfmomyi", "xfmomzi", &
+         &     "yfmomxn", "yfmomyn", "yfmomzn","yfmomxd", "yfmomyd", "yfmomzd","yfmomxi", "yfmomyi", "yfmomzi", &
+         &     "zfmomxn", "zfmomyn", "zfmomzn","zfmomxd", "zfmomyd", "zfmomzd","zfmomxi", "zfmomyi", "zfmomzi")
+            f%fu = "\rm{erg}/\rm{cm}^2/\rm{s}"
+            f%f2cgs = 1.0 / (erg/cm**2/sek)
+         case ("xfenen", "xfened", "xfenei","yfenen", "yfened", "yfenei","zfenen", "zfened", "zfenei")
+            f%fu = "\rm{erg}/\rm{cm}/\rm{s}^2"
+            f%f2cgs = 1.0 / (erg/cm/sek**2)
          case ("vlxd", "vlxn", "vlxi", "vlyd", "vlyn", "vlyi", "vlzd", "vlzn", "vlzi", "v", "c_s", "cs")
             f%fu = "\rm{cm}/\rm{s}"
             f%f2cgs = 1.0 / (cm/sek)
@@ -109,19 +120,22 @@ contains
             f%fu = "\rm{Gs}"
             f%f2cgs = 1.0 / (fpi * sqrt(cm / (miu0 * gram)) * sek)
             f%stag = 1
-         case ("divbc", "divbf", "divbc4", "divbf4", "divbc6", "divbf6", "divbc8", "divbf8")
+         case ("divbc", "divbf", "divbc4", "divbf4", "divbc6", "divbf6", "divbc8", "divbf8", "curx", "cury", "curz")
             f%fu= "\rm{Gs}/\rm{cm}" ! I'm not sure if it is a best description
             f%f2cgs = 1.0 / (fpi * sqrt(cm / (miu0 * gram)) * sek * cm)
          case ("divb_norm")
             f%fu= ""
          case ("magdir")
             f%fu = "\rm{radians}"
+         case ("xflux")
 #ifdef COSM_RAYS
+         ! ToDo: Adopt for wider range
          case ("cr01" : "cr99")
             f%fu = "\rm{erg}/\rm{cm}^3"
             f%f2cgs = 1.0 / (erg/cm**3)
 #endif /* COSM_RAYS */
 #ifdef CRESP
+         ! ToDo: Adopt for wider range
          case ("cr_e-n01" : "cr_e-n99")
              f%fu = "\rm{erg}/\rm{cm}^3" ! rest mass energy times number density
              f%f2cgs = 1.0 / (erg/cm**3)
@@ -296,6 +310,14 @@ contains
             case ("tdyn")
                newname="dynamical_time"
 #endif /* NBODY */
+            case ("xfdeni", "xfdenn", "xfdend", "yfdeni", "yfdenn", "yfdend", "zfdeni", "zfdenn", "zfdend")
+               write  (newname, '(A1,"_directed_density_flux")') var(1:1)
+         case ("xfmomxn", "xfmomyn", "xfmomzn","xfmomxd", "xfmomyd", "xfmomzd","xfmomxi", "xfmomyi", "xfmomzi", &
+         &     "yfmomxn", "yfmomyn", "yfmomzn","yfmomxd", "yfmomyd", "yfmomzd","yfmomxi", "yfmomyi", "yfmomzi", &
+         &     "zfmomxn", "zfmomyn", "zfmomzn","zfmomxd", "zfmomyd", "zfmomzd","zfmomxi", "zfmomyi", "zfmomzi")
+               write  (newname, '(A1,"_directed_momentum_",A1,"_flux")') var(1:1),var(6:6)
+            case ("xfenei", "xfenen", "xfened", "yfenei", "yfenen", "yfened", "zfenei", "zfenen", "zfened")
+               write  (newname, '(A1,"_directed_energy_flux")') var(1:1)
             case default
                write(newname, '(A)') trim(var)
          end select
@@ -412,6 +434,10 @@ contains
 #ifndef ISO
       use units,            only: kboltz, mH
 #endif /* !ISO */
+#ifdef RESISTIVE
+      use resistivity,        only: jn
+      use named_array_list,   only: wna
+#endif /* RESISTIVE */
 
       implicit none
 
@@ -424,22 +450,22 @@ contains
       integer(kind=4)                                :: i_xyz
       integer                                        :: ii, jj, kk, icr
 #ifdef COSM_RAYS
+      integer(kind=4)                                :: clast
       integer                                        :: i
       integer, parameter                             :: auxlen = dsetnamelen - 1
       character(len=auxlen)                          :: aux
-      !character(len=*)                               :: vname
+      !character(len=I_TWO)                           :: varn2
 #endif /* COSM_RAYS */
 #ifdef CRESP
       character(len=I_TWO)                           :: varn2
       integer                                        :: ibin
-      integer(kind=4)                                :: clast
+      !integer(kind=4)                                :: clast
 #endif /* CRESP */
 
       call common_shortcuts(var, fl_dni, i_xyz)
       if (.not. associated(fl_dni)) tab = -huge(1.)
       ierrh = 0
       tab = 0.0
-      icr = 0
 #ifdef CRESP
       ibin = 0
 #endif /* CRESP */
@@ -477,7 +503,7 @@ contains
 
                read (varn2,'(I2.2)') ibin
                do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3)) icr = i - ncrn
+                  if (cr_names(i).eq.var(4:clast-3)) icr = i !- ncrn
                enddo
                tab(:,:,:) = cg%u(flind%crspcs(icr)%ebeg+ibin-1, RNG)
 
@@ -487,7 +513,7 @@ contains
 
                read (varn2,'(I2.2)') ibin
                do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3)) icr = i - ncrn
+                  if (cr_names(i).eq.var(4:clast-3)) icr = i !- ncrn
                enddo
 
                !print *, 'flind%crspcs(icr)%nbeg+ibin-1: ', flind%crspcs(icr)%nbeg+ibin-1
@@ -517,6 +543,14 @@ contains
             read(var,'(A4,I2.2)') aux, i !> \deprecated BEWARE 0 <= i <= 99, no other indices can be dumped to hdf file
             tab(:,:,:) = cg%w(wna%ind(dfpq%q_nam))%arr(i,RNG)  !flind%crspc%fbeg+i-1, RNG)
 #endif /* CRESP */
+#ifdef RESISTIVE
+         case ('curx')
+            tab(:,:,:) = cg%w(wna%ind(jn))%arr(xdim, RNG)
+         case ('cury')
+            tab(:,:,:) = cg%w(wna%ind(jn))%arr(ydim, RNG)
+         case ('curz')
+            tab(:,:,:) = cg%w(wna%ind(jn))%arr(zdim, RNG)
+#endif /* RESISTIVE */
 #ifdef TRACER
          case ("trcr")
             tab(:,:,:) = cg%u(flind%trc%beg, RNG)
@@ -724,11 +758,12 @@ contains
 
    subroutine h5_write_to_single_file_v2(fname)
 
-      use constants,   only: PPP_IO
-      use common_hdf5, only: write_to_hdf5_v2, O_OUT
-      use gdf,         only: gdf_create_root_group
-      use mpisetup,    only: master, piernik_MPI_Barrier
-      use ppp,         only: ppp_main
+      !use barrier,      only: piernik_MPI_Barrier
+      use constants,    only: PPP_IO
+      use common_hdf5,  only: write_to_hdf5_v2, O_OUT
+      use gdf,          only: gdf_create_root_group
+      use mpisetup,     only: master, piernik_MPI_Barrier
+      use ppp,          only: ppp_main
 
       implicit none
 

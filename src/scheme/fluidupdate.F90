@@ -59,12 +59,13 @@ contains
 
    subroutine fluid_update
 
-      use constants,        only: RTVD_SPLIT, RIEMANN_SPLIT, HLLC_SPLIT, I_ONE, I_TWO
-      use dataio_pub,       only: die
-      use domain,           only: dom, is_refined
-      use global,           only: which_solver
-      use fluidupdate_hllc, only: fluid_update_simple
-      use ppp,              only: ppp_main
+      use constants,           only: RTVD_SPLIT, RIEMANN_SPLIT, HLLC_SPLIT, I_ONE, I_TWO
+      use dataio_pub,          only: die
+      use domain,              only: dom, is_refined
+      use global,              only: which_solver
+      use fluidupdate_hllc,    only: fluid_update_simple
+      use ppp,                 only: ppp_main
+      !use unsplit_fluidupdate, only: fluid_update_unsplit
 
       implicit none
 
@@ -78,8 +79,12 @@ contains
       select case (which_solver)
          case (HLLC_SPLIT)
             call fluid_update_simple
-         case (RTVD_SPLIT, RIEMANN_SPLIT)
+         case (RTVD_SPLIT)
             call fluid_update_full
+         case (RIEMANN_SPLIT)
+            call fluid_update_full
+         !case (RIEMANN_UNSPLIT)
+         !   call fluid_update_unsplit
          case default
             call die("[fluidupdate:fluid_update] unknown solver")
       end select
@@ -161,6 +166,9 @@ contains
 #ifdef SHEAR
       use shear,               only: shear_3sweeps
 #endif /* SHEAR */
+#ifdef RESISTIVE
+      use resistivity_helpers, only: add_resistivity_source
+#endif /* RESISTIVE */
 
       implicit none
 
@@ -178,6 +186,10 @@ contains
 #ifdef SHEAR
       call shear_3sweeps
 #endif /* SHEAR */
+
+#ifdef RESISTIVE
+   call add_resistivity_source ! dt/2
+#endif /* RESISTIVE */
 
 #ifdef GRAV
       call compute_h_gpot
@@ -220,6 +232,10 @@ contains
 
       call external_sources(forward)
       if (associated(problem_customize_solution)) call problem_customize_solution(forward)
+
+#ifdef RESISTIVE
+   call add_resistivity_source ! dt/2
+#endif /* RESISTIVE */
 
       call eglm
       call glmdamping

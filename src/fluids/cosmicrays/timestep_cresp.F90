@@ -38,7 +38,7 @@ module timestep_cresp
    private
    public :: dt_cre, cresp_timestep, dt_cre_synch, dt_cre_adiab, dt_cre_K, cresp_timestep_cell
 
-   real :: dt_cre, dt_cre_synch, dt_cre_adiab, dt_cre_K
+   real :: dt_cre, dt_cre_synch, dt_cre_adiab, dt_cre_K, dt_cre_hadronic
 
 contains
 
@@ -56,7 +56,7 @@ contains
       use func,             only: emag
       use grid_cont,        only: grid_container
       use initcosmicrays,   only: cfl_cr, iarr_crspc2_e, iarr_crspc2_n, nspc, diff_max_lev
-      use initcrspectrum,   only: K_cresp_paral, K_cresp_perp, spec_mod_trms, synch_active, adiab_active, icomp_active, use_cresp_evol, cresp, f_synchIC, u_b_max, cresp_substep, n_substeps_max, redshift
+      use initcrspectrum,   only: K_cresp_paral, K_cresp_perp, spec_mod_trms, synch_active, adiab_active, icomp_active, hadronic_active, use_cresp_evol, cresp, f_synchIC, u_b_max, cresp_substep, n_substeps_max, redshift
 
       use mpisetup,         only: piernik_MPI_Allreduce
 
@@ -73,6 +73,7 @@ contains
       dt_cre_K     = huge(1.)
       dt_cre_synch = huge(1.)
       dt_cre_adiab = huge(1.)
+      dt_cre_hadronic = huge(1.)
 
       if (.not. use_cresp_evol) return
 
@@ -127,11 +128,12 @@ contains
          enddo
       endif
 
-      call piernik_MPI_Allreduce(dt_cre_adiab, pMIN)
-      call piernik_MPI_Allreduce(dt_cre_synch, pMIN)
-      call piernik_MPI_Allreduce(dt_cre_K,     pMIN)
+      call piernik_MPI_Allreduce(dt_cre_adiab,    pMIN)
+      call piernik_MPI_Allreduce(dt_cre_synch,    pMIN)
+      call piernik_MPI_Allreduce(dt_cre_K,        pMIN)
+      call piernik_MPI_Allreduce(dt_cre_hadronic, pMIN)
 
-      dt_cre = min(dt_cre_adiab, dt_cre_synch)
+      dt_cre = min(dt_cre_adiab, dt_cre_synch, dt_cre_hadronic)
 
       if (cresp_substep) then
       ! with cresp_substep enabled, dt_cre_adiab and dt_cre_synch are used only within CRESP module for substepping
@@ -157,6 +159,21 @@ contains
       if (u_d_abs > eps) dt_cre_adiab = def_dtadiab(i_spc) / u_d_abs
 
    end subroutine cresp_timestep_adiabatic
+
+!----------------------------------------------------------------------------------------------------
+
+   subroutine cresp_timestep_hadronic(i_spc, u_h_abs)
+
+      use initcrspectrum, only: def_dthadronic, eps
+
+      implicit none
+
+      real, intent(in) :: u_h_abs    ! assumes that u_d > 0 always
+      integer(kind=4), intent(in) :: i_spc
+
+      if (u_h_abs > eps) dt_cre_hadronic = def_dthadronic(i_spc) / u_h_abs
+
+   end subroutine cresp_timestep_hadronic
 
 !----------------------------------------------------------------------------------------------------
 
@@ -186,7 +203,7 @@ contains
 
       use cresp_crspectrum, only: cresp_find_prepare_spectrum
       use initcosmicrays,   only: ncrb
-      use initcrspectrum,   only: adiab_active, synch_active, spec_mod_trms
+      use initcrspectrum,   only: adiab_active, synch_active, hadronic_active, spec_mod_trms
 
       implicit none
 
@@ -206,13 +223,17 @@ contains
       call cresp_find_prepare_spectrum(cresp_n, cresp_e, i_spc, empty_cell, i_up_cell) ! needed for synchrotron timestep
 
       if (.not. empty_cell) then
-         if (synch_active(i_spc)) call cresp_timestep_synchrotron_IC(i_spc, p_loss_terms%ub, i_up_cell)
-         if (adiab_active(i_spc)) call cresp_timestep_adiabatic(i_spc, p_loss_terms%ud)
+         if (synch_active(i_spc))   call cresp_timestep_synchrotron_IC(i_spc, p_loss_terms%ub, i_up_cell)
+         if (adiab_active(i_spc))   call cresp_timestep_adiabatic(i_spc, p_loss_terms%ud)
+         if (hadronic_active(i_spc)) call cresp_timestep_hadronic(i_spc, p_loss_terms%uh)
+         if (hadronic_active(i_spc)) print *, 'Are we here?'
+
+         if (hadronic_active(i_spc)) stop
       else
          return
       endif
 
-      dt_cell = min(dt_cre_adiab, dt_cre_synch)
+      dt_cell = min(dt_cre_adiab, dt_cre_synch, dt_cre_hadronic)
 
    end subroutine cresp_timestep_cell
 

@@ -40,9 +40,9 @@ module initcrspectrum
    private
    public :: use_cresp, use_cresp_evol, p_init, initial_spectrum, p_bnd, transrelativistic, p_br_init, f_init, q_init, q_br_init, q_big, cfl_cre, cre_eff, expan_order, e_small, e_small_approx_p, e_small_approx_init_cond,  &
            & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, nullify_empty_bins, synch_active, adiab_active,                 &
-           & icomp_active, coulomb_active, allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim_a, arr_dim_n, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,           &
+           & icomp_active, coulomb_active, hadronic_active, allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim_a, arr_dim_n, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,           &
            & spec_mod_trms, cresp_all_edges, cresp_all_bins, norm_init_spectrum_n, norm_init_spectrum_e, cresp, crel, dfpq, f_synchIC, init_cresp, cleanup_cresp_sp, check_if_dump_fpq, cleanup_cresp_work_arrays, q_eps,     &
-           & u_b_max, def_dtsynchIC, def_dtadiab, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, allow_unnatural_transfer, K_cresp_paral, K_cresp_perp, p_min_fix, p_max_fix, redshift, g_fix, s, one_ps, three_ps, four_ps, bin_old
+           & u_b_max, def_dtsynchIC, def_dtadiab, def_dthadronic, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, allow_unnatural_transfer, K_cresp_paral, K_cresp_perp, p_min_fix, p_max_fix, redshift, g_fix, s, one_ps, three_ps, four_ps, bin_old
 
 ! contains routines reading namelist in problem.par file dedicated to cosmic ray electron spectrum and initializes types used.
 ! available via namelist COSMIC_RAY_SPECTRUM
@@ -99,6 +99,7 @@ module initcrspectrum
    logical, dimension(:), allocatable :: adiab_active !< TEST feature - turns on / off adiabatic   cooling @ CRESP
    logical, dimension(:), allocatable :: icomp_active !< TEST feature - turns on / off Inv-Compton cooling @ CRESP
    logical, dimension(:), allocatable :: coulomb_active !< TEST feature - turns on / off Coulomb cooling @ CRESP
+   logical, dimension(:), allocatable :: hadronic_active !< TEST feature - turns on / off hadronic cooling @ CRESP
 
    real,    dimension(:), allocatable :: cre_active   !< electron contribution to Pcr ! TODO FIXME RENAME ME PLEASE!!!!
    real                               :: redshift                    !< redshift for chosen epoch WARNING this remains constant
@@ -155,6 +156,7 @@ module initcrspectrum
       real :: ud
       real :: umag
       real :: ucmb
+      real :: uh
    end type spec_mod_trms
 
    real, dimension(:), allocatable :: total_init_cree
@@ -171,7 +173,7 @@ module initcrspectrum
    end type dump_fpq_type
    type(dump_fpq_type) :: dfpq
 
-   real, allocatable, dimension(:) :: f_synchIC, def_dtadiab, def_dtsynchIC
+   real, allocatable, dimension(:) :: f_synchIC, def_dtadiab, def_dtsynchIC, def_dthadronic
 
 !====================================================================================================
 !
@@ -202,7 +204,7 @@ contains
       &                         NR_iter_limit, max_p_ratio, synch_active, adiab_active, arr_dim_a, arr_dim_n, arr_dim_q, q_br_init, &
       &                         Gamma_min_fix, Gamma_max_fix, nullify_empty_bins, approx_cutoffs, NR_run_refine_pf, b_max_db,       &
       &                         NR_refine_solution_q, NR_refine_pf_lo, NR_refine_pf_up, smallcree, smallcren, p_br_init_up, p_diff, &
-      &                         q_eps, NR_smap_file, cresp_substep, n_substeps_max, allow_unnatural_transfer, icomp_active, redshift, coulomb_active
+      &                         q_eps, NR_smap_file, cresp_substep, n_substeps_max, allow_unnatural_transfer, icomp_active, redshift, coulomb_active, hadronic_active
 
       call allocate_spectral_CRspecies_arrays(nspc, ncrb)
       ma1d = [nspc]
@@ -262,6 +264,7 @@ contains
       adiab_active(:)      = .true.
       icomp_active(:)      = .false.
       coulomb_active(:)    = .false.
+      hadronic_active(:)   = .false.
       cre_active(:)        = 0.0
 
       if (eCRSP(icr_H1)) then
@@ -332,18 +335,19 @@ contains
          lbuff(4+nspc:3+2*nspc)   = adiab_active(:)
          lbuff(4+2*nspc:3+3*nspc) = icomp_active(:)
          lbuff(4+3*nspc:3+4*nspc) = coulomb_active(:)
-         lbuff(4+4*nspc)          = force_init_NR
-         lbuff(5+4*nspc)          = NR_run_refine_pf
-         lbuff(6+4*nspc)          = NR_refine_solution_q
-         lbuff(7+4*nspc)          = NR_refine_pf_lo
-         lbuff(8+4*nspc)          = NR_refine_pf_up
-         lbuff(9+4*nspc)          = nullify_empty_bins
-         lbuff(10+4*nspc)         = approx_cutoffs
-         lbuff(11+4*nspc)         = NR_allow_old_smaps
+         lbuff(4+4*nspc:3+5*nspc) = hadronic_active(:)
+         lbuff(4+5*nspc)          = force_init_NR
+         lbuff(5+5*nspc)          = NR_run_refine_pf
+         lbuff(6+5*nspc)          = NR_refine_solution_q
+         lbuff(7+5*nspc)          = NR_refine_pf_lo
+         lbuff(8+5*nspc)          = NR_refine_pf_up
+         lbuff(9+5*nspc)          = nullify_empty_bins
+         lbuff(10+5*nspc)         = approx_cutoffs
+         lbuff(11+5*nspc)         = NR_allow_old_smaps
 
-         lbuff(12+4*nspc)         = cresp_substep
-         lbuff(13+4*nspc)         = allow_unnatural_transfer
-         lbuff(14+4*nspc)         = transrelativistic
+         lbuff(12+5*nspc)         = cresp_substep
+         lbuff(13+5*nspc)         = allow_unnatural_transfer
+         lbuff(14+5*nspc)         = transrelativistic
 
          rbuff(1:nspc)        = cfl_cre(1:nspc)
          rbuff(1+nspc:2*nspc) = cre_eff(1:nspc)
@@ -411,18 +415,19 @@ contains
          adiab_active                = lbuff(4+nspc:3+2*nspc)
          icomp_active                = lbuff(4+2*nspc:3+3*nspc)
          coulomb_active              = lbuff(4+3*nspc:3+4*nspc)
-         force_init_NR               = lbuff(4+4*nspc)
-         NR_run_refine_pf            = lbuff(5+4*nspc)
-         NR_refine_solution_q        = lbuff(6+4*nspc)
-         NR_refine_pf_lo             = lbuff(7+4*nspc)
-         NR_refine_pf_up             = lbuff(8+4*nspc)
-         nullify_empty_bins          = lbuff(9+4*nspc)
-         approx_cutoffs              = lbuff(10+4*nspc)
-         NR_allow_old_smaps          = lbuff(11+4*nspc)
+         hadronic_active             = lbuff(4+4*nspc:3+5*nspc)
+         force_init_NR               = lbuff(4+5*nspc)
+         NR_run_refine_pf            = lbuff(5+5*nspc)
+         NR_refine_solution_q        = lbuff(6+5*nspc)
+         NR_refine_pf_lo             = lbuff(7+5*nspc)
+         NR_refine_pf_up             = lbuff(8+5*nspc)
+         nullify_empty_bins          = lbuff(9+5*nspc)
+         approx_cutoffs              = lbuff(10+5*nspc)
+         NR_allow_old_smaps          = lbuff(11+5*nspc)
 
-         cresp_substep               = lbuff(12+4*nspc)
-         allow_unnatural_transfer    = lbuff(13+4*nspc)
-         transrelativistic           = lbuff(14+4*nspc)
+         cresp_substep               = lbuff(12+5*nspc)
+         allow_unnatural_transfer    = lbuff(13+5*nspc)
+         transrelativistic           = lbuff(14+5*nspc)
 
          cfl_cre(1:nspc)      = rbuff(1:nspc)  !TODO check if i'm correct :)
          cre_eff(1:nspc)      = rbuff(1+nspc:2*nspc)
@@ -682,6 +687,7 @@ contains
 
       def_dtadiab(:) = cfl_cre(:) * half * three * logten * w
       def_dtsynchIC(:) = cfl_cre(:) * half * w
+      def_dthadronic(:) = cfl_cre(:) * half * logten * w
 
       print *, 'def_dtsynchIC(:) : ', def_dtsynchIC(:)
       print *, 'p_max_fix : ', p_max_fix
@@ -945,12 +951,14 @@ contains
       if (allocated(f_synchIC))   call my_deallocate(f_synchIC)
       if (allocated(def_dtadiab))   call my_deallocate(def_dtadiab)
       if (allocated(def_dtsynchIC))   call my_deallocate(def_dtsynchIC)
+      if (allocated(def_dthadronic))   call my_deallocate(def_dthadronic)
       if (allocated(total_init_cree))   call my_deallocate(total_init_cree)
       if (allocated(cre_active))   call my_deallocate(cre_active)
       if (allocated(synch_active))   call my_deallocate(synch_active)
       if (allocated(adiab_active))   call my_deallocate(adiab_active)
       if (allocated(icomp_active))   call my_deallocate(icomp_active)
       if (allocated(coulomb_active))   call my_deallocate(coulomb_active)
+      if (allocated(hadronic_active))   call my_deallocate(hadronic_active)
 
       if (allocated(p_init))   call my_deallocate(p_init)
       if (allocated(p_br_init))   call my_deallocate(p_br_init)
@@ -986,12 +994,14 @@ contains
       call my_allocate(f_synchIC, ma1d)
       call my_allocate(def_dtadiab, ma1d)
       call my_allocate(def_dtsynchIC, ma1d)
+      call my_allocate(def_dthadronic, ma1d)
       call my_allocate(total_init_cree, ma1d)
       call my_allocate(cre_active, ma1d)
       call my_allocate_with_index(synch_active, nsp, I_ONE)
       call my_allocate_with_index(adiab_active, nsp, I_ONE)
       call my_allocate_with_index(icomp_active, nsp, I_ONE)
       call my_allocate_with_index(coulomb_active, nsp, I_ONE)
+      call my_allocate_with_index(hadronic_active, nsp, I_ONE)
 
       ma2d = [nsp, nb * I_TWO]
       call my_allocate(K_cresp_paral, ma2d)

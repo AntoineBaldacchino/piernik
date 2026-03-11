@@ -42,6 +42,8 @@ module cresp_variables ! & constants
    real, parameter :: fpcc2        = fpi * clight_cresp**2
    real, parameter :: fp3cc        = fpi / three * clight_cresp
 
+   real, parameter :: p_th         = 0.832 !p_th = (0.78 GeV/c)/(m_p c) is the threshold momentum above which hadronic losses for protons are triggered
+
 ! these will most probably be in types and will be modified by the driver (piernik)
 !
 !   integer              :: taylor_coeff_2nd, taylor_coeff_3rd

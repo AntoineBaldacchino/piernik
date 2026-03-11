@@ -95,7 +95,8 @@ module cr_data
    integer,                   allocatable, dimension(:)    :: cr_index           !< table of flind indices for CR species
    real,                      allocatable, dimension(:)    :: cr_mass            !< table of mass numbers for CR species
    real,                      allocatable, dimension(:,:)  :: cr_sigma           !< table of cross sections for spallation
-   real,                      allocatable, dimension(:)    :: cr_sigma_N         !< table of cross sections for spallation
+   real,                      allocatable, dimension(:)    :: cr_sigma_N         !< table of cross sections for generalized Thomson scattering
+   real,                      allocatable, dimension(:)    :: cr_sigma_h         !< table of cross sections for hadronic losses
    real,                      allocatable, dimension(:)    :: cr_tau             !< table of decay half live times
    real,                      allocatable, dimension(:)    :: cr_primary         !< table of initial source abundances TODO rename me please !
    real,                      allocatable, dimension(:)    :: cr_Z               !< table of atomic numbers
@@ -346,7 +347,7 @@ contains
       eCRSP_spec (1:nicr) = [eE(SPEC), eH1(SPEC), eC12(SPEC), eN14(SPEC), eO16(SPEC), eLi7(SPEC), eBe9(SPEC), eBe10(SPEC) , eB10(SPEC), eB11(SPEC) ]
       eCRSP_prim (1:nicr) = [eE(PRIM), eH1(PRIM), eC12(PRIM), eN14(PRIM), eO16(PRIM), eLi7(PRIM), eBe9(PRIM), eBe10(PRIM) , eB10(PRIM), eB11(PRIM) ]
 
-      allocate(cr_names(ncrsp), cr_table(nicr), cr_index(nicr), cr_sigma(ncrsp,ncrsp), cr_tau(ncrsp), cr_primary(ncrsp), cr_mass(ncrsp), cr_Z(ncrsp), cr_spectral(ncrsp), cr_gpess(ncrsp),cr_sigma_N(ncrsp), icr_spc(count(eCRSP_spec .and. eCRSP)), iarr_spc(ncrsp), rel_abound(ncrsp))
+      allocate(cr_names(ncrsp), cr_table(nicr), cr_index(nicr), cr_sigma(ncrsp,ncrsp), cr_tau(ncrsp), cr_primary(ncrsp), cr_mass(ncrsp), cr_Z(ncrsp), cr_spectral(ncrsp), cr_gpess(ncrsp),cr_sigma_N(ncrsp), cr_sigma_h(ncrsp), icr_spc(count(eCRSP_spec .and. eCRSP)), iarr_spc(ncrsp), rel_abound(ncrsp))
       cr_names(:)    = ''
       cr_table(:)    = 0
       cr_index(:)    = 0
@@ -358,6 +359,7 @@ contains
       cr_spectral(:) = .false.
       cr_gpess(:)    = .false.
       rel_abound(:) = 0.
+      cr_sigma_h(:) = 0.
 
       icr = 0 ; jcr = 0; kcr = 0
 
@@ -378,6 +380,7 @@ contains
             endif
             cr_sigma_N(icr)  = (cr_Z(icr))**4/(cr_mass(icr)**2)*(me/mp)**2*sigma_T ! Schlickeiser, Cosmic ray astrophysics (2002), formula p.105
             if (icr == icr_E)  cr_sigma_N(icr) = sigma_T
+            if (icr == icr_H1) cr_sigma_h(icr) = sigma_pp
             if (eCRSP_spec(i)) then
                if (i /= icr_E) then
                   write(msg, '(3a)') "[cr_data:init_cr_species] Energy spectral treatment for ", eCRSP_names(i), " under development, results will not be reliable."
@@ -395,6 +398,10 @@ contains
          endif
       enddo
 
+      cr_sigma_h(:) = cr_sigma_h * mbarn
+
+      print *, 'cr_sigma_h: ', cr_sigma_h
+
       do icr = 1, ncrsp
 
          if (icr == cr_table(icr_H1) .and. eH1(PRIM))  rel_abound(icr) = 1.
@@ -409,6 +416,7 @@ contains
       print *, 'cr_index : ', cr_index
       print *, 'cr_sigma : ', cr_sigma
       print *, 'cr_sigma_N : ', cr_sigma_N
+      print *, 'cr_sigma_h: ', cr_sigma_h
       print *, 'cr_tau : ', cr_tau
       print *, 'cr_primary : ', cr_primary
       print *, 'cr_gpess : ', cr_gpess
@@ -440,25 +448,25 @@ contains
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_C12), cr_table(icr_Li7 )) = sigma_C12_Li7
          if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_C12), cr_table(icr_Be9 )) = sigma_C12_Be9
          if (eCRSP(icr_Be10)) cr_sigma(cr_table(icr_C12), cr_table(icr_Be10)) = sigma_C12_Be10
-        ! if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B10 )) = sigma_C12_B10
-        ! if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B11 )) = sigma_C12_B11
+         !if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B10 )) = sigma_C12_B10
+         !if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_C12), cr_table(icr_B11 )) = sigma_C12_B11
 
       endif
       if (eCRSP(icr_N14)) then
          cr_primary(cr_table(icr_N14)) = primary_N14
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Li7 )) = sigma_N14_Li7
-       ! if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be9 )) = sigma_N14_Be9
-       ! if (eCRSP(icr_Be10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be10)) = sigma_N14_Be10
-       ! if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B10 )) = sigma_N14_B10
-       ! if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B11 )) = sigma_N14_B11
+         !if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be9 )) = sigma_N14_Be9
+         !if (eCRSP(icr_Be10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_Be10)) = sigma_N14_Be10
+         !if (eCRSP(icr_B10 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B10 )) = sigma_N14_B10
+         !if (eCRSP(icr_B11 )) cr_sigma(cr_table(icr_N14), cr_table(icr_B11 )) = sigma_N14_B11
       endif
       if (eCRSP(icr_O16)) then
          cr_primary(cr_table(icr_O16)) = primary_O16
          if (eCRSP(icr_Li7 )) cr_sigma(cr_table(icr_O16), cr_table(icr_Li7 )) = sigma_O16_Li7
          if (eCRSP(icr_Be9 )) cr_sigma(cr_table(icr_O16), cr_table(icr_Be9 )) = sigma_O16_Be9
          if (eCRSP(icr_Be10)) cr_sigma(cr_table(icr_O16), cr_table(icr_Be10)) = sigma_O16_Be10
-      !   if (eCRSP(icr_B10)) cr_sigma(cr_table(icr_O16), cr_table(icr_B10)) = sigma_O16_B10
-      !   if (eCRSP(icr_B11)) cr_sigma(cr_table(icr_O16), cr_table(icr_B11)) = sigma_O16_B11
+         !if (eCRSP(icr_B10)) cr_sigma(cr_table(icr_O16), cr_table(icr_B10)) = sigma_O16_B10
+         !if (eCRSP(icr_B11)) cr_sigma(cr_table(icr_O16), cr_table(icr_B11)) = sigma_O16_B11
       endif
       cr_sigma = cr_sigma * mbarn
       if (eCRSP(icr_Be10)) cr_tau(cr_table(icr_Be10)) = tau_Be10 * myr

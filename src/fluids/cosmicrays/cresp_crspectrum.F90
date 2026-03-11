@@ -76,7 +76,7 @@ module cresp_crspectrum
    integer(kind=4), dimension(LO:HI) :: i_cut, i_cut_next
    real, allocatable, dimension(:) :: p                                   !> momentum table for piecewise power-law spectrum intervals
    real, allocatable, dimension(:) :: f                                   !> distribution function for piecewise power-law spectrum
-   real, allocatable, dimension(:) :: p_next, p_upw , nflux, eflux        !> predicted and upwind momenta, number density / energy density fluxes
+   real, allocatable, dimension(:) :: p_next, g_next, p_upw , nflux, eflux        !> predicted and upwind momenta, number density / energy density fluxes
    real                            :: n_tot, n_tot0, e_tot, e_tot0        !> precision control for energy / number density transport and dissipation of energy
    real, allocatable, dimension(:) :: ndt, edt                            !> work array of number density and energy during algorithm execution
    real, allocatable, dimension(:) :: n, e                                !> in-algorithm energy & number density
@@ -88,8 +88,8 @@ module cresp_crspectrum
    integer(kind=4), dimension(LO:HI), parameter:: oz = [I_ONE, I_ZERO], pm = [I_ONE, -I_ONE] !> auxiliary vectors /todo to be renamed
 
    abstract interface
-      real function function_pointer_1D(x,y)
-         real, intent(in) :: x, y
+      real function function_pointer_1D(x,y,z)
+         real, intent(in) :: x, y, z
       end function function_pointer_1D
    end interface
 
@@ -254,7 +254,7 @@ contains
 
       do i_sub = 1, n_substep                   !< if one substep, all is done the classic way
 ! Compute momentum changes in after time period [t,t+dt]
-         call cresp_update_bin_index(sptab%ub*dt, sptab%ud*dt, p_cut, p_cut_next, cfl_cresp_violation)
+         call cresp_update_bin_index(sptab%ub*dt, sptab%ud*dt, sptab%uh*dt, p_cut, p_cut_next, cfl_cresp_violation, i_spc)
 
          if (cfl_cresp_violation) then !< disallow_CRnegatives is not used here, as potential negatives do not appear in transfer of n,e but in p
             approx_p = e_small_approx_p         !< restore approximation after momenta computed
@@ -277,7 +277,7 @@ contains
 
 ! edt(1:ncrb) = e(1:ncrb) *(one-0.5*dt*r(1:ncrb)) - (eflux(1:ncrb) - eflux(0:ncrb-1))/(one+0.5*dt*r(1:ncrb))   !!! oryginalnie u Miniatiego
 ! Compute coefficients R_i needed to find energy in [t,t+dt]
-         call cresp_compute_r(sptab%ub, sptab%ud, p_next, active_bins_next, i_spc)                 ! new active bins already received some particles, Ri is needed for those bins too
+         call cresp_compute_r(sptab%ub, sptab%ud, sptab%uh, p_next, active_bins_next, i_spc)                 ! new active bins already received some particles, Ri is needed for those bins too
 
          edt(1:ncrb) = edt(1:ncrb) *(one-dt*r(1:ncrb))
 
@@ -327,7 +327,7 @@ contains
 
       if (coulomb_active(i_spc) .eqv. .true.) then
 
-         f = nq_to_f(p(0:ncrb-1), p(1:ncrb), n(1:ncrb), q(1:ncrb), active_bins)
+         f = nq_to_f(p(0:ncrb-1), p(1:ncrb), ndt(1:ncrb), q(1:ncrb), active_bins)
 
          call cresp_compute_free_cooling(u_cell, f, p, q, i_spc, active_bins, dt)
 
@@ -357,6 +357,7 @@ contains
       write (msg, '(A5, 50E18.9)') "p_fix", p_fix      ; call printinfo(msg)
       write (msg, '(A5, 50E18.9)') "p_act", p          ; call printinfo(msg)
       write (msg, '(A5, 50E18.9)') "p_nex", p_next     ; call printinfo(msg)
+      write (msg, '(A5, 50E18.9)') "g_nex", g_next     ; call printinfo(msg)
       write (msg, '(A5, 50E18.9)') "p_upw", p_upw      ; call printinfo(msg)
       write (msg, '(A6, 1EN22.9, A9, 1EN22.9)') "p_lo ", p_cut(LO), ",  p_up ", p_cut(HI)  ; call printinfo(msg)
 
@@ -840,32 +841,53 @@ contains
 
 !----------------------------------------------------------------------------------------------------
 
-   subroutine cresp_update_bin_index(ubdt, uddt, p_cut, p_cut_next, dt_too_high) ! evaluates only "next" momenta and is called after finding outer cutoff momenta
+   subroutine cresp_update_bin_index(ubdt, uddt, uhdt, p_cut, p_cut_next, dt_too_high, i_spc) ! evaluates only "next" momenta and is called after finding outer cutoff momenta
 
       use constants,      only: zero, I_ZERO, I_ONE, one
+      use cresp_variables,only: p_th
+      use cr_data,        only: cr_mass, icr_spc
 #ifdef CRESP_VERBOSED
       use dataio_pub,     only: msg, printinfo
 #endif /* CRESP_VERBOSED */
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: p_fix, cresp_all_bins, cresp_all_edges, p_bnd
+      use initcrspectrum, only: p_fix, g_fix, cresp_all_bins, cresp_all_edges, p_bnd, hadronic_active, transrelativistic
 
       implicit none
 
-      real,                   intent(in)  :: ubdt, uddt     !> in-algorithm energy dissipation terms
+      real,                   intent(in)  :: ubdt, uddt, uhdt     !> in-algorithm energy dissipation terms
       real, dimension(LO:HI), intent(in)  :: p_cut
       real, dimension(LO:HI), intent(out) :: p_cut_next
       logical,                intent(out) :: dt_too_high
       integer                             :: i
+      integer(kind=4),         intent(in) :: i_spc
+
+      !print *, 'in Cresp_update_bin index: '
+      !print *, 'p_th: ', p_th
+
+
 
       dt_too_high = .false.
 ! Compute p_cut at [t+dt] (update p_range)
-      p_cut_next = p_cut * (one + [p_rch(uddt, ubdt*p_cut(LO)), p_rch(uddt, ubdt*p_cut(HI))]) ! changed from - to + for the sake of intuitiveness in p_rch subroutine
+
+      if (p_cut(LO) .lt. p_th .and. p_cut(HI) .lt. p_th ) then ! don't apply hadronic cooling for momentum lower than threshold p_th
+         p_cut_next = p_cut * (one + [p_rch(uddt, ubdt*p_cut(LO), 0.0), p_rch(uddt, ubdt*p_cut(HI), 0.0)]) ! changed from - to + for the sake of intuitiveness in p_rch subroutine.
+      else if (p_cut(LO) .lt. p_th .and. p_cut(HI) .gt. p_th ) then
+         if (transrelativistic .eqv. .true.) p_cut_next = p_cut * (one + [p_rch(uddt, ubdt*p_cut(LO), 0.0), p_rch(uddt, ubdt*p_cut(HI), uhdt*p_cut(HI)/sqrt(cr_mass(icr_spc(i_spc))**2+p_cut(HI)**2))])
+         if (transrelativistic .eqv. .false.) p_cut_next = p_cut * (one + [p_rch(uddt, ubdt*p_cut(LO), 0.0), p_rch(uddt, ubdt*p_cut(HI), uhdt)])
+      else if (p_cut(LO) .gt. p_th .and. p_cut(HI) .gt. p_th ) then
+
+         if (transrelativistic .eqv. .true.) p_cut_next = p_cut * (one + [p_rch(uddt, ubdt*p_cut(LO), uhdt*p_cut(LO)/sqrt(cr_mass(icr_spc(i_spc))**2+p_cut(LO)**2)), p_rch(uddt, ubdt*p_cut(HI), uhdt*p_cut(HI)/sqrt(cr_mass(icr_spc(i_spc))**2+p_cut(HI)**2))])
+         if (transrelativistic .eqv. .false.) p_cut_next = p_cut * (one + [p_rch(uddt, ubdt*p_cut(LO), uhdt), p_rch(uddt, ubdt*p_cut(HI), uhdt)])
+      endif
+
       p_cut_next = abs(p_cut_next)
 
       if (p_bnd == 'fix') then
 
          p_cut_next(LO) = max(p_cut(LO), p_cut_next(LO))
          p_cut_next(HI) = min(p_cut(HI), p_cut_next(HI))
+
+         i_cut_next = i_cut
 
       else if (p_bnd == 'mov') then
 ! Compute likely cut-off indices after current timestep
@@ -902,14 +924,39 @@ contains
       num_active_bins_next = count(is_active_bin_next)
       allocate(active_bins_next(num_active_bins_next))
       active_bins_next = pack(cresp_all_bins, is_active_bin_next)
+      !print *, 'i_cut_next(LO)+1: ', i_cut_next(LO)+1
+      !print *, 'i_cut_next(HI): ', i_cut_next(HI)
+      !
+      !print *, 'is_active_bin_next: ', is_active_bin_next
+      !print *, 'count(is_active_bin_next): ', count(is_active_bin_next)
 
       p_next = zero
       p_next(fixed_edges_next) = p_fix(fixed_edges_next)
       p_next(i_cut_next) = p_cut_next
 
+      !print *, 'fixed_edges_next: ',    fixed_edges_next
+      !print *, 'p_fix: ', p_fix
+      !print *, 'p_fix(fixed_edges_next): ', p_fix(fixed_edges_next)
+
+!print *, 'p_next: ', p_next
+
 ! Compute upwind momentum p_upw for all fixed edges
       p_upw = zero
-      p_upw(1:ncrb) = [( p_fix(i)*(one - p_rch(uddt,ubdt*p_fix(i))), i=1,ncrb )] !< p_upw is computed with minus sign
+      if (transrelativistic .eqv. .true.) p_upw(1:ncrb) = [( p_fix(i)*(one - p_rch(uddt,ubdt*p_fix(i),uhdt*p_fix(i)/sqrt(p_fix(i)**2+cr_mass(icr_spc(i_spc))**2))), i=1,ncrb )] !< p_upw is computed with minus sign. uhdt=0 if hadronic_active is false
+      if (transrelativistic .eqv. .false.) p_upw(1:ncrb) = [( p_fix(i)*(one - p_rch(uddt,ubdt*p_fix(i),uhdt)), i=1,ncrb )] !< p_upw is computed with minus sign
+      !print *, 'uhdt: ', uhdt
+      !print *, 'uddt: ', uddt
+      !print *, 'ubdt*p_fix: ', ubdt*p_fix
+      if (hadronic_active(i_spc) .eqv. .true.) then
+         !print *, 'Here we are!'
+         do i = 1, ncrb
+            !print *, 'i: ', i
+            !print *, 'p_upw(',i,'): ', p_upw(i)
+            if (p_upw(i) .lt. p_th .or. p_upw(i) .eq. p_th  ) p_upw(i) = p_fix(i)*(one - p_rch(uddt,ubdt*p_fix(i),0.0))! No hadronic cooling applies under the threshold
+            !if (p_upw(i) .lt. p_th .or. p_upw(i) .eq. p_th  ) print *, 'Ho cooling in this bin'
+         enddo
+      endif
+      !stop
 
 #ifdef CRESP_VERBOSED
       write (msg, "(A, 2I3)") 'Change of  cut index lo,up:', del_i    ; call printinfo(msg)
@@ -1173,8 +1220,8 @@ contains
          !call ne_to_q(n, e, q, active_bins, i_spc)
          ! Compute f on left bin faces at [t]
          !f = nq_to_f(p(0:ncrb-1), p(1:ncrb), n(1:ncrb), q(1:ncrb), active_bins)
-        !print *, 'test f =',  f
-        !print *, 'test q =',  q
+        print *, 'test f =',  f
+        print *, 'test q =',  q
 
 
         total_init_cree(i_spc) = sum(e) !< total_init_cree value is used for initial spectrum scaling when spectrum is injected by source.
@@ -1239,10 +1286,10 @@ contains
       n = n + fq_to_n(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), q(1:ncrb), act_bins)
       e = e + fq_to_e(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), g_fix(i_spc,0:ncrb-1), q(1:ncrb), act_bins, i_spc)
 
-      print *, 'active bins: ', active_bins
-
-      print *, 'f: ', f
-      print *, 'q: ', q
+      !print *, 'active bins: ', active_bins
+      !
+      !print *, 'f: ', f
+      !print *, 'q: ', q
 
       call my_deallocate(act_bins)
       call my_deallocate(act_edges)
@@ -1881,21 +1928,33 @@ contains
 ! compute R (eq. 25)
 !
 !-------------------------------------------------------------------------------------------------
-   subroutine cresp_compute_r(u_b, u_d, p, bins, i_spc)
+   subroutine cresp_compute_r(u_b, u_d, u_h, p, bins, i_spc)
 
-      use constants,      only: zero, one
-      use initcosmicrays, only: ncrb
-      use initcrspectrum, only: s, three_ps, four_ps, eps
+      use constants,       only: zero, one, two
+      use cr_data,         only: cr_mass, icr_spc
+      use cresp_variables, only: p_th
+      use initcosmicrays,  only: ncrb
+      use initcrspectrum,  only: s, three_ps, four_ps, eps, hadronic_active, transrelativistic
 
       implicit none
 
       integer(kind=4), dimension(:), intent(in) :: bins
       integer(kind=4)              , intent(in) :: i_spc
-      real,                          intent(in) :: u_b, u_d
+      integer                                   :: i
+      real,                          intent(in) :: u_b, u_d, u_h
       real, dimension(0:ncrb),       intent(in) :: p
-      real, dimension(size(bins))               :: r_num, r_den
+      real, dimension(0:ncrb)                   :: g !kinetic energy g is locally rebuilt here
+      real, dimension(size(bins))               :: r_num, r_den, r_hadr, r_hadr_th
+
+      !print *, 'in cresp_compute_r: '
+     !
+     !print *, 'p_next in cresp_compute_r: ', p
+      !stop
 
       r = zero
+      g = zero
+
+      g = sqrt(cr_mass(icr_spc(i_spc))**2 + p**2) - cr_mass(icr_spc(i_spc))
 
       ! Found here an FPE occurring in mcrwind/mcrwind_cresp
       ! bins = [ 11, 12, 13, 14, 15 ]
@@ -1914,9 +1973,58 @@ contains
          r_den = log(p(bins)/p(bins-1))
       endwhere
 
-      where (abs(r_num) > zero .and. abs(r_den) > zero)                  !< BEWARE - regression: comparisons against
-         r(bins) = s(i_spc,bins)*(u_d + u_b * r_num/r_den) !all cooling effects will come here   !< eps and epsilon result in bad results;
-      endwhere                                                                  !< range of values ofr_num and r_den is very wide
+      if (hadronic_active(i_spc) .eqv. .true. .and. transrelativistic .eqv. .false.) then
+         where (abs(q(bins) - three_ps(i_spc,bins)) > eps)
+            r_hadr_th = ((p_th/p(bins-1))**(three_ps(i_spc,bins)-q(bins))-one)/(three_ps(i_spc,bins)-q(bins)) !where p_left<p_th and p_right>p_th for hadronic losses, this term computes the fraction of particles cooling in this bin
+         elsewhere
+            r_hadr_th = log(p_th/p(bins-1))
+         endwhere
+      else if (hadronic_active(i_spc) .eqv. .true. .and. transrelativistic .eqv. .true.) then
+         where (abs(q(bins) - 2*s(i_spc,bins) - two) > eps)
+            r_hadr_th = ((p_th/p(bins-1))**(2*s(i_spc,bins)-q(bins)+two)-one)/(2*s(i_spc,bins)-q(bins)+two) !where p_left<p_th and p_right>p_th for hadronic losses, this term computes the fraction of particles cooling in this bin
+         elsewhere
+            r_hadr_th = log(p_th/p(bins-1))
+         endwhere
+      endif
+
+      if (hadronic_active(i_spc) .eqv. .true. .and. transrelativistic .eqv. .true.) then
+         where (abs(q(bins) - 2*s(i_spc,bins) - two) > eps)
+            r_hadr = ((p(bins)/p(bins-1))**(2*s(i_spc,bins)-q(bins)+two)-one)/(2*s(i_spc,bins)-q(bins)+two) !where p_left<p_th and p_right>p_th for hadronic losses, this term computes the fraction of particles cooling in this bin
+         elsewhere
+            r_hadr = log(p(bins)/p(bins-1))
+         endwhere
+      endif
+
+      if (transrelativistic .eqv. .true.) then
+         where (abs(r_num) > zero .and. abs(r_den) > zero)                  !< BEWARE - regression: comparisons against
+            r(bins) = s(i_spc,bins)*(u_d + u_h*g(bins-1)/p(bins-1)*s(i_spc,bins)*r_hadr/r_den + u_b * r_num/r_den) !all cooling effects will come here   !< eps and epsilon result in bad results;
+         endwhere
+      else
+         where (abs(r_num) > zero .and. abs(r_den) > zero)
+            r(bins) = s(i_spc,bins)*(u_d + u_h + u_b * r_num/r_den)
+         endwhere
+      endif                                                                 !< range of values ofr_num and r_den is very wide
+
+
+
+      if (hadronic_active(i_spc) .eqv. .true.) then
+         !print *, 'we should be here'
+         do i = 1, size(bins)
+            !print *, 'i: ', i
+            !print *, 'p(i): ', p(i)
+            if (transrelativistic .eqv. .true.) then
+               if (p(i-1) .lt. p_th .and. p(i) .lt. p_th) r(i) = r(i) - s(i_spc,i)**2*u_h*g(i-1)/p(i-1)*r_hadr(i)/r_den(i) !The hadronic part is removed, since it is unphysical
+               !if (p(i-1) .lt. p_th .and. p(i) .lt. p_th) print *, 'No cooling there' !The hadronic part is removed, since it is unphysical
+               if (p(i-1) .lt. p_th .and. p(i) .gt. p_th) r(i) = r(i) - s(i_spc,i)**2*u_h*g(i-1)/p(i-1)*r_hadr_th(i)/r_den(i) !where p_left<p_th and p_right>p_th for hadronic losses, only remove the fraction of particles not energetic enough to create pions
+               !if (p(i-1) .lt. p_th .and. p(i) .gt. p_th) print *, 'Here, only partial cooling!'
+            else
+               if (p(i-1) .lt. p_th .and. p(i) .lt. p_th) r(i) = r(i) - s(i_spc,i)*u_h !The hadronic part is removed, since it is unphysical
+               !if (p(i-1) .lt. p_th .and. p(i) .lt. p_th) print *, 'No cooling there' !The hadronic part is removed, since it is unphysical
+               if (p(i-1) .lt. p_th .and. p(i) .gt. p_th) r(i) = r(i) - s(i_spc,i)*u_h*r_hadr_th(i)/r_den(i)
+            endif
+         enddo
+      endif
+      !stop
 
    end subroutine cresp_compute_r
 
@@ -2250,30 +2358,12 @@ contains
 
       h = - 1.9 !value of the power law coefficient for momentum-dependent Coulomb cooling approximation
 
-      p_cut = 1.0e2 !p_0(10) ! Momentum value under which cooling applies. Above, the spectrum is unchanged.
+      p_cut = 1.0e6 !p_0(10) ! Momentum value under which cooling applies. Above, the spectrum is unchanged.
 
       if (has_ion) dgas = dgas + u_cell(flind%ion%idn) / mp
       if (has_neu) dgas = dgas + u_cell(flind%neu%idn) / mH
 
       loss_amplitude = Lambda_Cc*cr_Z(icr_spc(i_spc))**2*(cr_mass(icr_spc(i_spc))/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
-
-      ! compute substep and delta_p once
-
-      !delta_t_sub = 0.1*abs(p_0(0)**(1-h)/loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
-      !
-      !n_sub = max(1,int(delta_t/delta_t_sub))
-      !
-      !if (n_sub .gt. n_step_max) then
-      !
-      !   n_sub = n_step_max
-      !   delta_t_sub = delta_t/n_sub
-      !
-      !endif
-      !
-      !delta_p = (1-h)*delta_t_sub*loss_amplitude
-      !print *, 'n_sub (before any loop: ', n_sub
-
-      ! initialize arrays
 
       f_old = f_0
       f_0(last_bin) = zero
@@ -2406,6 +2496,7 @@ contains
       ! Number of particles leaving the CR regime during this substep
       dN1_out = Fp1_out * delta_t_sub / dp1
 
+      !Flux on the left boundary bin
       !if (dN1_out >= f_0(1) * (1.0d0 - eps_f)) then
       !   ! Tout le contenu du bin 1 est vidé
       !   dN1_out = f_0(1)
@@ -2431,8 +2522,8 @@ contains
       ! Accumulate diagnostic (for conservation test)
       N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1
 
-         ! --- Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
-      do i_bin = 1, last_bin
+         ! Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
+      do i_bin = 1, last_bin-2
          if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. p_cut) then !For p_0(i_bin), same condtion at high-energy for q
             q_0(i_bin) = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
          !else
@@ -2450,37 +2541,37 @@ end subroutine cresp_compute_free_cooling
 !>
 !! \brief Relative change of momentum due to losses (u_b*p*dt) and compression u_d*dt (Taylor expansion up to 3rd order)
 !<
-   real function p_rch_ord_1(uddt, ubpdt)
+   real function p_rch_ord_1(uddt, ubpdt, uhdt)
 
       implicit none
 
-      real, intent(in) :: uddt, ubpdt
+      real, intent(in) :: uddt, ubpdt, uhdt
 
-      p_rch_ord_1 = -(uddt + ubpdt)
+      p_rch_ord_1 = -(uddt + ubpdt + uhdt)
 
    end function p_rch_ord_1
 !-------------------------------------------------------------------------------------------------
-   real function p_rch_ord_2_1(uddt, ubpdt)     !< adds 2nd term and calls 1st order
+   real function p_rch_ord_2_1(uddt, ubpdt, uhdt)     !< adds 2nd term and calls 1st order
 
       use constants, only: half
 
       implicit none
 
-      real, intent(in) :: uddt, ubpdt
+      real, intent(in) :: uddt, ubpdt, uhdt
 
-      p_rch_ord_2_1 = p_rch_ord_1(uddt, ubpdt) + ( half*uddt**2 + ubpdt**2)
+      p_rch_ord_2_1 = p_rch_ord_1(uddt, ubpdt, uhdt) + ( half*uddt**2 + half*uhdt**2 + ubpdt**2)
 
    end function p_rch_ord_2_1
 !-------------------------------------------------------------------------------------------------
-   real function p_rch_ord_3_2_1(uddt, ubpdt)     !< adds 3rd term and calls 2nd and 1st order
+   real function p_rch_ord_3_2_1(uddt, ubpdt, uhdt)     !< adds 3rd term and calls 2nd and 1st order
 
       use constants, only: onesth
 
       implicit none
 
-      real, intent(in) :: uddt, ubpdt
+      real, intent(in) :: uddt, ubpdt, uhdt
 
-      p_rch_ord_3_2_1 = p_rch_ord_2_1(uddt, ubpdt) - onesth * uddt**3 - ubpdt**3
+      p_rch_ord_3_2_1 = p_rch_ord_2_1(uddt, ubpdt, uhdt) - onesth * uddt**3 - onesth * uhdt**3- ubpdt**3
 
    end function p_rch_ord_3_2_1
 !----------------------------------------------------------------------------------------------------
@@ -2546,6 +2637,7 @@ end subroutine cresp_compute_free_cooling
       call my_allocate_with_index(ndt,ma1d, I_ONE)
 
       call my_allocate_with_index(p_next,ma1d, I_ZERO)
+      call my_allocate_with_index(g_next,ma1d, I_ZERO)
       call my_allocate_with_index(p_upw,ma1d, I_ZERO)
       call my_allocate_with_index(nflux,ma1d, I_ZERO)
       call my_allocate_with_index(eflux,ma1d, I_ZERO)
@@ -2586,6 +2678,7 @@ end subroutine cresp_compute_free_cooling
       call my_deallocate(ndt)
 
       call my_deallocate(p_next)
+      call my_deallocate(g_next)
       call my_deallocate(p_upw)
       call my_deallocate(nflux)
       call my_deallocate(eflux)

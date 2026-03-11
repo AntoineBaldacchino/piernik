@@ -118,20 +118,24 @@ contains
       use cg_list,          only: cg_list_element
       use constants,        only: xdim, ydim, zdim, onet
       use cresp_crspectrum, only: cresp_update_cell
-      use cr_data,          only: cr_table, icr_C12, icr_N14, icr_O16, eC12, eO16, eN14, PRIM
+      use cr_data,          only: cr_table, icr_C12, icr_N14, icr_O16, eC12, eO16, eN14, PRIM, cr_sigma_h
       use crhelpers,        only: divv_i
       use cresp_helpers,    only: enden_CMB
-      use dataio_pub,       only: msg, warn
+      use dataio_pub,       only: msg, warn, die
+      use domain,           only: dom
+      use fluidindex,       only: flind
+      use fluids_pub,       only: has_ion, has_neu
       use func,             only: emag
       use global,           only: dt
       use grid_cont,        only: grid_container
       use initcosmicrays,   only: iarr_crspc2_e, iarr_crspc2_n, nspc, ncrb
-      use initcrspectrum,   only: spec_mod_trms, synch_active, adiab_active, icomp_active, cresp, crel, dfpq, f_synchIC, u_b_max, use_cresp_evol, bin_old
+      use initcrspectrum,   only: spec_mod_trms, synch_active, adiab_active, icomp_active, hadronic_active, cresp, crel, dfpq, f_synchIC, u_b_max, use_cresp_evol, bin_old
       use initcrspectrum,   only: cresp_substep, n_substeps_max, redshift
       use named_array_list, only: wna
       use ppp,              only: ppp_main
       use sourcecosmicrays, only: cr_spallation_sources
       use timestep_cresp,   only: cresp_timestep_cell
+      use units,            only: clight, mH, mp
 #ifdef DEBUG
       use cresp_crspectrum, only: cresp_detect_negative_content
 #endif /* DEBUG */
@@ -149,6 +153,8 @@ contains
       character(len=*), parameter    :: crug_label = "CRESP_upd_grid"
       real, dimension(ncrb)          :: q_spc
       real, dimension(ncrb,nspc)     :: q_spc_all
+      real, dimension(flind%all)     :: u_cell
+      real                           :: dgas
 
       allocate(crspc_bins_all(2*nspc*ncrb))
 
@@ -167,6 +173,13 @@ contains
       q_spc = 0.
       q_spc_all = 0.
       !usrc_cell = 0.0
+
+      !if (dom%eff_dim == 0) call die("[cresp_grid:cresp_update_grid] dom%eff_dim == 0 is not supported yet")
+
+      dgas = 0.0
+      !dgas = dgas * clight / dom%eff_dim
+      !dgas = 3.e57
+
       do while (associated(cgl))
          cg => cgl%cg
          call cg%costs%start
@@ -177,7 +190,10 @@ contains
             do j = cg%js, cg%je
                do i = cg%is, cg%ie
 
-                  sptab%ud = 0.0 ; sptab%ub = 0.0; sptab%umag = 0.0
+                  if (has_ion) dgas = dgas +  cg%u(flind%ion%idn, i, j, k)/mp
+                  if (has_neu) dgas = dgas +  cg%u(flind%neu%idn, i, j, k)/mH
+
+                  sptab%ud = 0.0 ; sptab%ub = 0.0; sptab%umag = 0.0; sptab%uh = 0.0
 
                   !print *, 'cresp%n: ', cresp%n
                   !print *, 'cresp%e: ', cresp%e
@@ -201,6 +217,15 @@ contains
                      if (adiab_active(i_spc)) sptab%ud = cg%q(divv_i)%point([i,j,k]) * onet
                      if (icomp_active(i_spc)) sptab%ucmb = enden_CMB(redshift) * f_synchIC(i_spc)
                      sptab%ub = sptab%umag + sptab%ucmb
+                     if (hadronic_active(i_spc)) sptab%uh = 0.5 * dgas * clight * cr_sigma_h(i_spc+1)
+                     !if (hadronic_active(i_spc)) print *, 'hello?!'
+
+                     !print *, 'cr_sigma_h(',i_spc+1,'): ', cr_sigma_h(i_spc+1)
+                     !print *, 'dgas: ', dgas
+                     !print *, 'i_spc: ', i_spc
+                     !print *, 'gamma_pp: ', 0.5 * dgas * clight * cr_sigma_h(i_spc+1)
+                     !print *, 'tau_pp: ', 1/(0.5 * dgas * clight * cr_sigma_h(i_spc+1))
+                     !stop
 
                      if (cresp_substep) then !< prepare substep timestep for each cell
                         call cresp_timestep_cell(cresp%n, cresp%e, sptab, dt_cresp, i_spc, inactive_cell)

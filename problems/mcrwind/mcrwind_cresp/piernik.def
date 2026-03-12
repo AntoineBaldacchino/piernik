@@ -10,7 +10,7 @@
 #define CRESP
 
 #define MAGNETIC
-#undef RESISTIVE
+#define RESISTIVE
 
 #define GRAV
 

@@ -503,7 +503,7 @@ contains
 
                read (varn2,'(I2.2)') ibin
                do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3)) icr = i !- ncrn
+                  if (cr_names(i).eq.var(4:clast-3)) icr = i - ncrn
                enddo
                tab(:,:,:) = cg%u(flind%crspcs(icr)%ebeg+ibin-1, RNG)
 
@@ -513,7 +513,7 @@ contains
 
                read (varn2,'(I2.2)') ibin
                do i = 1, size(cr_names)
-                  if (cr_names(i).eq.var(4:clast-3)) icr = i !- ncrn
+                  if (cr_names(i).eq.var(4:clast-3)) icr = i - ncrn
                enddo
 
                !print *, 'flind%crspcs(icr)%nbeg+ibin-1: ', flind%crspcs(icr)%nbeg+ibin-1

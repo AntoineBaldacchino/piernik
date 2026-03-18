@@ -203,6 +203,7 @@ contains
 
    subroutine compute_resist
 
+      use all_boundaries,   only: all_mag_boundaries
       use cg_cost_data,     only: I_MHD
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
@@ -221,6 +222,7 @@ contains
       if (.not.eta1_active) return
 !--- square current computing in cell corner step by step
       if (dom%geometry_type /= GEO_XYZ) call die("[resistivity:compute_resist] Unsupported geometry")
+      call all_mag_boundaries
 
       cgl => leaves%first
       do while (associated(cgl))

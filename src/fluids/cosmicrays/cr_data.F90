@@ -380,7 +380,7 @@ contains
             endif
             cr_sigma_N(icr)  = (cr_Z(icr))**4/(cr_mass(icr)**2)*(me/mp)**2*sigma_T ! Schlickeiser, Cosmic ray astrophysics (2002), formula p.105
             if (icr == icr_E)  cr_sigma_N(icr) = sigma_T
-            if (icr == icr_H1) cr_sigma_h(icr) = sigma_pp
+            if (icr == cr_table(icr_H1)) cr_sigma_h(icr) = sigma_pp
             if (eCRSP_spec(i)) then
                if (i /= icr_E) then
                   write(msg, '(3a)') "[cr_data:init_cr_species] Energy spectral treatment for ", eCRSP_names(i), " under development, results will not be reliable."

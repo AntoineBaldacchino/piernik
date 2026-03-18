@@ -217,8 +217,7 @@ contains
                      if (adiab_active(i_spc)) sptab%ud = cg%q(divv_i)%point([i,j,k]) * onet
                      if (icomp_active(i_spc)) sptab%ucmb = enden_CMB(redshift) * f_synchIC(i_spc)
                      sptab%ub = sptab%umag + sptab%ucmb
-                     if (hadronic_active(i_spc)) sptab%uh = 0.5 * dgas * clight * cr_sigma_h(i_spc+1)
-                     !if (hadronic_active(i_spc)) print *, 'hello?!'
+                     if (hadronic_active(i_spc)) sptab%uh = 0.5 * dgas * clight * cr_sigma_h(i_spc)
 
                      !print *, 'cr_sigma_h(',i_spc+1,'): ', cr_sigma_h(i_spc+1)
                      !print *, 'dgas: ', dgas

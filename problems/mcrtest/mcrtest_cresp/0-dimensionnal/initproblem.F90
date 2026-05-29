@@ -375,19 +375,19 @@ contains
 
             cr_total = 0
 
-            do k = cg%ks, cg%ke
-               do j = cg%js, cg%je
-                  do i = cg%is, cg%ie
-
-                     cr_total(:) = cg%u(iarr_crspc2_n(cr_table(icr_B10),:), i, j, k)+cg%u(iarr_crspc2_n(cr_table(icr_C12),:), i, j, k)
-
-                     output1 = sum(cg%u(iarr_crspc2_n(cr_table(icr_C12),:), i, j, k))
-                     output2 = sum(cg%u(iarr_crspc2_n(cr_table(icr_B10),:), i, j, k))
-                     output3 = sum(cr_total(:))
-
-                  enddo
-               enddo
-            enddo
+            !do k = cg%ks, cg%ke
+            !   do j = cg%js, cg%je
+            !      do i = cg%is, cg%ie
+            !
+            !         cr_total(:) = cg%u(iarr_crspc2_n(cr_table(icr_B10),:), i, j, k)+cg%u(iarr_crspc2_n(cr_table(icr_C12),:), i, j, k)
+            !
+            !         output1 = sum(cg%u(iarr_crspc2_n(cr_table(icr_C12),:), i, j, k))
+            !         output2 = sum(cg%u(iarr_crspc2_n(cr_table(icr_B10),:), i, j, k))
+            !         output3 = sum(cr_total(:))
+            !
+            !      enddo
+            !   enddo
+            !enddo
 
             call cg%costs%stop(I_IC)
             cgl=>cgl%nxt

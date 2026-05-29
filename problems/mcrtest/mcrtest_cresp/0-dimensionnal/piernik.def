@@ -18,4 +18,4 @@
 #undef RANDOMIZE
 #undef MULTIGRID
 
-#define CRESP_VERBOSED
+#undef CRESP_VERBOSED
